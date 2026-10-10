@@ -1,0 +1,771 @@
+{
+  "site": {
+    "name": "Atelier Morane",
+    "baseline": {
+      "$t": {
+        "fr": "Architecture en territoire de pente, entre Arve et Giffre.",
+        "en": "Architecture on sloping ground, between the Arve and the Giffre."
+      }
+    },
+    "about": {
+      "$t": {
+        "fr": [
+          [
+            {
+              "text": "L’atelier construit peu, et "
+            },
+            {
+              "text": "toujours en montagne",
+              "bold": true
+            },
+            {
+              "text": ". Chaque projet part du terrain : sa pente, son eau, ce que l’hiver en fait. Nous dessinons des bâtiments compacts, en bois et en pierre du pays, pensés pour être entretenus par ceux qui les habitent."
+            }
+          ],
+          [
+            {
+              "text": "Fondé en 2014 à Sallanches, l’atelier réunit quatre architectes et travaille avec les mêmes charpentiers depuis ses débuts."
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "text": "The studio builds little, and "
+            },
+            {
+              "text": "always in the mountains",
+              "bold": true
+            },
+            {
+              "text": ". Each project starts from the ground: its slope, its water, what winter does to it. We draw compact buildings in local timber and stone, meant to be looked after by the people who live in them."
+            }
+          ],
+          [
+            {
+              "text": "Founded in 2014 in Sallanches, the studio brings together four architects and has worked with the same carpenters since its first day."
+            }
+          ]
+        ]
+      }
+    },
+    "portrait": {
+      "id": "a_seed001",
+      "path": "/media/a_seed001/atelier.jpg",
+      "name": "atelier.jpg",
+      "mime": "image/jpeg",
+      "size": 312455,
+      "kind": "image",
+      "width": 2400,
+      "height": 1650,
+      "variants": [
+        {
+          "path": "/media/a_seed001/atelier-640.webp",
+          "width": 640
+        },
+        {
+          "path": "/media/a_seed001/atelier-1280.webp",
+          "width": 1280
+        },
+        {
+          "path": "/media/a_seed001/atelier-1920.webp",
+          "width": 1920
+        }
+      ]
+    },
+    "contact": {
+      "address": "12 quai de l’Arve\n74700 Sallanches",
+      "email": "bonjour@atelier-morane.example",
+      "phone": "04 50 00 00 00"
+    }
+  },
+  "projects": [
+    {
+      "id": "p_refuge",
+      "slug": "refuge-de-la-combe-noire",
+      "title": "Refuge de la Combe Noire",
+      "year": "2024",
+      "place": "Vallorcine",
+      "program": "Équipement public",
+      "surface": "310 m²",
+      "summary": {
+        "$t": {
+          "fr": "Un refuge de trente-deux couchages à 2 180 m, héliporté en onze rotations et monté en six semaines.",
+          "en": "A thirty-two-bed mountain hut at 2,180 m, flown in over eleven helicopter rotations and assembled in six weeks."
+        }
+      },
+      "cover": {
+        "id": "a_seed002",
+        "path": "/media/a_seed002/combe-noire-facade-sud.jpg",
+        "name": "combe-noire-facade-sud.jpg",
+        "mime": "image/jpeg",
+        "size": 105367,
+        "kind": "image",
+        "width": 2400,
+        "height": 1650,
+        "variants": [
+          {
+            "path": "/media/a_seed002/combe-noire-facade-sud-640.webp",
+            "width": 640
+          },
+          {
+            "path": "/media/a_seed002/combe-noire-facade-sud-1280.webp",
+            "width": 1280
+          },
+          {
+            "path": "/media/a_seed002/combe-noire-facade-sud-1920.webp",
+            "width": 1920
+          }
+        ]
+      },
+      "credits": [
+        {
+          "id": "i_seed001",
+          "role": {
+            "$t": {
+              "fr": "Maîtrise d’ouvrage",
+              "en": "Client"
+            }
+          },
+          "name": "Commune de Vallorcine"
+        },
+        {
+          "id": "i_seed002",
+          "role": {
+            "$t": {
+              "fr": "Charpente",
+              "en": "Timber frame"
+            }
+          },
+          "name": "Scierie du Giffre"
+        },
+        {
+          "id": "i_seed003",
+          "role": {
+            "$t": {
+              "fr": "Photographies",
+              "en": "Photographs"
+            }
+          },
+          "name": "Lise Arnaud"
+        }
+      ],
+      "sections": [
+        {
+          "id": "i_seed004",
+          "type": "texte",
+          "text": {
+            "$t": {
+              "fr": [
+                [
+                  {
+                    "text": "Le bâtiment tourne le dos au couloir d’avalanche et s’ouvre au sud-est, vers le lever du jour. Sa structure en épicéa lamellé a été préfabriquée dans la vallée, par modules dimensionnés pour l’hélicoptère."
+                  }
+                ],
+                [
+                  {
+                    "text": "Le socle en pierre du site abrite le local hors-sac, "
+                  },
+                  {
+                    "text": "accessible tout l’hiver sans gardien",
+                    "italic": true
+                  },
+                  {
+                    "text": ". Le chantier est raconté dans le "
+                  },
+                  {
+                    "text": "carnet de l’atelier",
+                    "href": "/#atelier"
+                  },
+                  {
+                    "text": "."
+                  }
+                ]
+              ],
+              "en": [
+                [
+                  {
+                    "text": "The building turns its back on the avalanche path and opens to the south-east, towards sunrise. Its laminated spruce frame was prefabricated in the valley, in modules sized for the helicopter."
+                  }
+                ],
+                [
+                  {
+                    "text": "The plinth, built with stone from the site, houses the winter room, "
+                  },
+                  {
+                    "text": "open all winter with no warden",
+                    "italic": true
+                  },
+                  {
+                    "text": ". The building site is told in the "
+                  },
+                  {
+                    "text": "studio’s notebook",
+                    "href": "/en#atelier"
+                  },
+                  {
+                    "text": "."
+                  }
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "id": "i_seed005",
+          "type": "galerie",
+          "files": [
+            {
+              "id": "a_seed003",
+              "path": "/media/a_seed003/combe-noire-plan-de-masse.jpg",
+              "name": "combe-noire-plan-de-masse.jpg",
+              "mime": "image/jpeg",
+              "size": 316393,
+              "kind": "image",
+              "width": 2400,
+              "height": 1650,
+              "variants": [
+                {
+                  "path": "/media/a_seed003/combe-noire-plan-de-masse-640.webp",
+                  "width": 640
+                },
+                {
+                  "path": "/media/a_seed003/combe-noire-plan-de-masse-1280.webp",
+                  "width": 1280
+                },
+                {
+                  "path": "/media/a_seed003/combe-noire-plan-de-masse-1920.webp",
+                  "width": 1920
+                }
+              ],
+              "caption": "Plan de masse, courbes de niveau tous les cinq mètres"
+            },
+            {
+              "id": "a_seed004",
+              "path": "/media/a_seed004/combe-noire-niveau-1.jpg",
+              "name": "combe-noire-niveau-1.jpg",
+              "mime": "image/jpeg",
+              "size": 124057,
+              "kind": "image",
+              "width": 1800,
+              "height": 2250,
+              "variants": [
+                {
+                  "path": "/media/a_seed004/combe-noire-niveau-1-640.webp",
+                  "width": 640
+                },
+                {
+                  "path": "/media/a_seed004/combe-noire-niveau-1-1280.webp",
+                  "width": 1280
+                }
+              ],
+              "caption": "Niveau 1, dortoirs"
+            },
+            {
+              "id": "a_seed005",
+              "path": "/media/a_seed005/combe-noire-survol.mp4",
+              "name": "combe-noire-survol.mp4",
+              "mime": "video/mp4",
+              "size": 1946345,
+              "kind": "video",
+              "width": 1920,
+              "height": 1080,
+              "duration": 7,
+              "poster": {
+                "path": "/media/a_seed005/combe-noire-survol-poster.jpg",
+                "width": 1920,
+                "height": 1080
+              },
+              "caption": "Survol du site"
+            }
+          ]
+        },
+        {
+          "id": "i_seed006",
+          "type": "citation",
+          "quote": {
+            "$t": {
+              "fr": "On y mange face à la combe.",
+              "en": "You eat facing the combe."
+            }
+          },
+          "author": "Le gardien"
+        },
+        {
+          "id": "i_seed007",
+          "type": "galerie",
+          "files": [
+            {
+              "id": "a_seed006",
+              "path": "/media/a_seed006/combe-noire-maquette.glb",
+              "name": "combe-noire-maquette.glb",
+              "mime": "model/gltf-binary",
+              "size": 2848,
+              "kind": "model",
+              "caption": "Maquette de volume"
+            },
+            {
+              "id": "a_seed007",
+              "path": "/media/a_seed007/combe-noire-facade-est.jpg",
+              "name": "combe-noire-facade-est.jpg",
+              "mime": "image/jpeg",
+              "size": 111344,
+              "kind": "image",
+              "width": 2400,
+              "height": 1650,
+              "variants": [
+                {
+                  "path": "/media/a_seed007/combe-noire-facade-est-640.webp",
+                  "width": 640
+                },
+                {
+                  "path": "/media/a_seed007/combe-noire-facade-est-1280.webp",
+                  "width": 1280
+                },
+                {
+                  "path": "/media/a_seed007/combe-noire-facade-est-1920.webp",
+                  "width": 1920
+                }
+              ],
+              "caption": "Façade est"
+            },
+            {
+              "id": "a_seed008",
+              "path": "/media/a_seed008/combe-noire-notice.pdf",
+              "name": "combe-noire-notice.pdf",
+              "mime": "application/pdf",
+              "size": 784,
+              "kind": "pdf",
+              "caption": "Notice descriptive"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "p_halle",
+      "slug": "halle-aux-grains",
+      "title": "Halle aux grains",
+      "year": "2023",
+      "place": "Bonneville",
+      "program": "Réhabilitation",
+      "surface": "1 240 m²",
+      "summary": {
+        "$t": {
+          "fr": "Une halle de 1887 devenue marché couvert et salle de quartier, sans toucher à sa charpente.",
+          "en": "An 1887 grain hall turned covered market and neighbourhood room, without touching its roof frame."
+        }
+      },
+      "cover": {
+        "id": "a_seed009",
+        "path": "/media/a_seed009/halle-facade.jpg",
+        "name": "halle-facade.jpg",
+        "mime": "image/jpeg",
+        "size": 102687,
+        "kind": "image",
+        "width": 2400,
+        "height": 1650,
+        "variants": [
+          {
+            "path": "/media/a_seed009/halle-facade-640.webp",
+            "width": 640
+          },
+          {
+            "path": "/media/a_seed009/halle-facade-1280.webp",
+            "width": 1280
+          },
+          {
+            "path": "/media/a_seed009/halle-facade-1920.webp",
+            "width": 1920
+          }
+        ]
+      },
+      "credits": [
+        {
+          "id": "i_seed008",
+          "role": {
+            "$t": {
+              "fr": "Maîtrise d’ouvrage",
+              "en": "Client"
+            }
+          },
+          "name": "Ville de Bonneville"
+        },
+        {
+          "id": "i_seed009",
+          "role": {
+            "$t": {
+              "fr": "Structure",
+              "en": "Structure"
+            }
+          },
+          "name": "BE Chablais"
+        }
+      ],
+      "sections": [
+        {
+          "id": "i_seed010",
+          "type": "texte",
+          "text": {
+            "$t": {
+              "fr": [
+                [
+                  {
+                    "text": "La halle était fermée depuis vingt ans. Le projet retire tout ce qui avait été ajouté, puis glisse sous la charpente deux volumes bas en bois qui ne la touchent nulle part."
+                  }
+                ],
+                [
+                  {
+                    "text": "Le sol en béton désactivé se prolonge sur le parvis : les jours de marché, les étals débordent dehors."
+                  }
+                ]
+              ],
+              "en": [
+                [
+                  {
+                    "text": "The hall had been closed for twenty years. The project removes everything that had been added, then slides two low timber volumes under the roof frame without touching it anywhere."
+                  }
+                ],
+                [
+                  {
+                    "text": "The exposed-aggregate concrete floor runs out onto the forecourt: on market days, the stalls spill outside."
+                  }
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "id": "i_seed011",
+          "type": "galerie",
+          "files": [
+            {
+              "id": "a_seed010",
+              "path": "/media/a_seed010/halle-rez-de-chaussee.jpg",
+              "name": "halle-rez-de-chaussee.jpg",
+              "mime": "image/jpeg",
+              "size": 123152,
+              "kind": "image",
+              "width": 1800,
+              "height": 2250,
+              "variants": [
+                {
+                  "path": "/media/a_seed010/halle-rez-de-chaussee-640.webp",
+                  "width": 640
+                },
+                {
+                  "path": "/media/a_seed010/halle-rez-de-chaussee-1280.webp",
+                  "width": 1280
+                }
+              ],
+              "caption": "Rez-de-chaussée"
+            },
+            {
+              "id": "a_seed011",
+              "path": "/media/a_seed011/halle-facade-nord.jpg",
+              "name": "halle-facade-nord.jpg",
+              "mime": "image/jpeg",
+              "size": 118112,
+              "kind": "image",
+              "width": 2400,
+              "height": 1650,
+              "variants": [
+                {
+                  "path": "/media/a_seed011/halle-facade-nord-640.webp",
+                  "width": 640
+                },
+                {
+                  "path": "/media/a_seed011/halle-facade-nord-1280.webp",
+                  "width": 1280
+                },
+                {
+                  "path": "/media/a_seed011/halle-facade-nord-1920.webp",
+                  "width": 1920
+                }
+              ],
+              "caption": "Façade nord, sur le parvis"
+            },
+            {
+              "id": "a_seed012",
+              "path": "/media/a_seed012/halle-situation.jpg",
+              "name": "halle-situation.jpg",
+              "mime": "image/jpeg",
+              "size": 308078,
+              "kind": "image",
+              "width": 2400,
+              "height": 1650,
+              "variants": [
+                {
+                  "path": "/media/a_seed012/halle-situation-640.webp",
+                  "width": 640
+                },
+                {
+                  "path": "/media/a_seed012/halle-situation-1280.webp",
+                  "width": 1280
+                },
+                {
+                  "path": "/media/a_seed012/halle-situation-1920.webp",
+                  "width": 1920
+                }
+              ],
+              "caption": "Plan de situation"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "p_maison",
+      "slug": "maison-sur-la-pente",
+      "title": "Maison sur la pente",
+      "year": "2022",
+      "place": "Talloires",
+      "program": "Logement",
+      "surface": "148 m²",
+      "summary": {
+        "$t": {
+          "fr": "Trois demi-niveaux posés sur un terrain à 38 %, pour ne rien terrasser.",
+          "en": "Three half-levels set on a 38% slope, so that nothing is levelled."
+        }
+      },
+      "cover": {
+        "id": "a_seed013",
+        "path": "/media/a_seed013/maison-pente-facade.jpg",
+        "name": "maison-pente-facade.jpg",
+        "mime": "image/jpeg",
+        "size": 107363,
+        "kind": "image",
+        "width": 2400,
+        "height": 1650,
+        "variants": [
+          {
+            "path": "/media/a_seed013/maison-pente-facade-640.webp",
+            "width": 640
+          },
+          {
+            "path": "/media/a_seed013/maison-pente-facade-1280.webp",
+            "width": 1280
+          },
+          {
+            "path": "/media/a_seed013/maison-pente-facade-1920.webp",
+            "width": 1920
+          }
+        ]
+      },
+      "credits": [
+        {
+          "id": "i_seed012",
+          "role": {
+            "$t": {
+              "fr": "Pierre sèche",
+              "en": "Dry stone"
+            }
+          },
+          "name": "Les Murs du Lac"
+        }
+      ],
+      "sections": [
+        {
+          "id": "i_seed013",
+          "type": "texte",
+          "text": {
+            "$t": {
+              "fr": [
+                [
+                  {
+                    "text": "La maison suit la pente au lieu de la corriger. On entre par le haut, côté route, et l’on descend vers le lac de demi-niveau en demi-niveau."
+                  }
+                ],
+                [
+                  {
+                    "text": "Chaque palier donne sur une terrasse de plain-pied, tenue par un mur en pierre sèche remonté avec les blocs trouvés sur place."
+                  }
+                ]
+              ],
+              "en": [
+                [
+                  {
+                    "text": "The house follows the slope instead of correcting it. You enter from the top, on the road side, and walk down towards the lake half a level at a time."
+                  }
+                ],
+                [
+                  {
+                    "text": "Each landing opens onto a terrace at the same level, held by a dry-stone wall rebuilt with the blocks found on site."
+                  }
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "id": "i_seed014",
+          "type": "galerie",
+          "files": [
+            {
+              "id": "a_seed014",
+              "path": "/media/a_seed014/maison-pente-terrain.jpg",
+              "name": "maison-pente-terrain.jpg",
+              "mime": "image/jpeg",
+              "size": 293134,
+              "kind": "image",
+              "width": 2400,
+              "height": 1650,
+              "variants": [
+                {
+                  "path": "/media/a_seed014/maison-pente-terrain-640.webp",
+                  "width": 640
+                },
+                {
+                  "path": "/media/a_seed014/maison-pente-terrain-1280.webp",
+                  "width": 1280
+                },
+                {
+                  "path": "/media/a_seed014/maison-pente-terrain-1920.webp",
+                  "width": 1920
+                }
+              ],
+              "caption": "Le terrain avant travaux"
+            },
+            {
+              "id": "a_seed015",
+              "path": "/media/a_seed015/maison-pente-niveau-haut.jpg",
+              "name": "maison-pente-niveau-haut.jpg",
+              "mime": "image/jpeg",
+              "size": 143484,
+              "kind": "image",
+              "width": 1800,
+              "height": 2250,
+              "variants": [
+                {
+                  "path": "/media/a_seed015/maison-pente-niveau-haut-640.webp",
+                  "width": 640
+                },
+                {
+                  "path": "/media/a_seed015/maison-pente-niveau-haut-1280.webp",
+                  "width": 1280
+                }
+              ],
+              "caption": "Niveau haut, entrée et séjour"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "p_chai",
+      "slug": "chai-des-roches",
+      "title": "Chai des Roches",
+      "year": "2021",
+      "place": "Ayse",
+      "program": "Équipement public",
+      "surface": "520 m²",
+      "summary": {
+        "$t": {
+          "fr": "Un chai semi-enterré pour une coopérative de sept vignerons.",
+          "en": "A half-buried winery for a cooperative of seven winegrowers."
+        }
+      },
+      "cover": {
+        "id": "a_seed016",
+        "path": "/media/a_seed016/chai-facade.jpg",
+        "name": "chai-facade.jpg",
+        "mime": "image/jpeg",
+        "size": 114062,
+        "kind": "image",
+        "width": 2400,
+        "height": 1650,
+        "variants": [
+          {
+            "path": "/media/a_seed016/chai-facade-640.webp",
+            "width": 640
+          },
+          {
+            "path": "/media/a_seed016/chai-facade-1280.webp",
+            "width": 1280
+          },
+          {
+            "path": "/media/a_seed016/chai-facade-1920.webp",
+            "width": 1920
+          }
+        ]
+      },
+      "credits": [],
+      "sections": [
+        {
+          "id": "i_seed015",
+          "type": "texte",
+          "text": {
+            "$t": {
+              "fr": [
+                [
+                  {
+                    "text": "Le chai s’enfonce dans le coteau pour garder les cuves à température sans machine. Seule la salle de dégustation émerge, sous un toit à une pente tourné vers les vignes."
+                  }
+                ]
+              ],
+              "en": [
+                [
+                  {
+                    "text": "The winery digs into the hillside to keep the vats at temperature without machines. Only the tasting room emerges, under a single-pitch roof turned towards the vines."
+                  }
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "id": "i_seed016",
+          "type": "galerie",
+          "files": [
+            {
+              "id": "a_seed017",
+              "path": "/media/a_seed017/chai-plan.jpg",
+              "name": "chai-plan.jpg",
+              "mime": "image/jpeg",
+              "size": 134915,
+              "kind": "image",
+              "width": 1800,
+              "height": 2250,
+              "variants": [
+                {
+                  "path": "/media/a_seed017/chai-plan-640.webp",
+                  "width": 640
+                },
+                {
+                  "path": "/media/a_seed017/chai-plan-1280.webp",
+                  "width": 1280
+                }
+              ],
+              "caption": "Niveau des cuves"
+            },
+            {
+              "id": "a_seed018",
+              "path": "/media/a_seed018/chai-coteau.jpg",
+              "name": "chai-coteau.jpg",
+              "mime": "image/jpeg",
+              "size": 310636,
+              "kind": "image",
+              "width": 2400,
+              "height": 1650,
+              "variants": [
+                {
+                  "path": "/media/a_seed018/chai-coteau-640.webp",
+                  "width": 640
+                },
+                {
+                  "path": "/media/a_seed018/chai-coteau-1280.webp",
+                  "width": 1280
+                },
+                {
+                  "path": "/media/a_seed018/chai-coteau-1920.webp",
+                  "width": 1920
+                }
+              ],
+              "caption": "Le coteau"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
