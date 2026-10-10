@@ -1,0 +1,15 @@
+---
+import { load } from '../../content'
+import Project from '../../views/Project.astro'
+
+export async function getStaticPaths() {
+  const { projects } = await load('fr')
+  return projects.map((p) => ({ params: { slug: p.slug } }))
+}
+
+// While editing, a project can be removed between two requests.
+const { projects } = await load('fr')
+if (!projects.some((p) => p.slug === Astro.params.slug)) return new Response(null, { status: 404 })
+---
+
+<Project locale="fr" slug={Astro.params.slug} />

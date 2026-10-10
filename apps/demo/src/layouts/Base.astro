@@ -1,0 +1,51 @@
+---
+import '@fontsource-variable/big-shoulders'
+import '@fontsource-variable/hanken-grotesk'
+import '../styles/global.css'
+import { edit } from '@foliome/astro/content'
+import { ClientRouter } from 'astro:transitions'
+import { load } from '../content'
+import { link, type Locale, twin, ui } from '../i18n'
+
+interface Props {
+  locale: Locale
+  title?: string
+  description?: string
+}
+
+const { locale, title, description } = Astro.props
+const { site } = await load(locale)
+const t = ui(locale)
+---
+
+<!doctype html>
+<html lang={locale}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title ? `${title} | ${site.name}` : site.name}</title>
+    <meta name="description" content={description || site.baseline} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <ClientRouter />
+  </head>
+  <body>
+    <header class="top">
+      <a class="top-name" href={link(locale, '/')} {...edit('site.name')}>{site.name}</a>
+      <nav class="top-nav" aria-label={locale === 'fr' ? 'Navigation principale' : 'Main navigation'}>
+        <a href={`${link(locale, '/')}#projets`}>{t.projects}</a>
+        <a href={`${link(locale, '/')}#atelier`}>{t.studio}</a>
+        <a href={twin(locale, Astro.url.pathname)} lang={locale === 'fr' ? 'en' : 'fr'} hreflang={locale === 'fr' ? 'en' : 'fr'}>{t.switchTo}</a>
+      </nav>
+    </header>
+    <main>
+      <slot />
+    </main>
+    <footer class="bottom">
+      <span>© {new Date().getFullYear()} {site.name}</span>
+      {site.contact.email && <a href={`mailto:${site.contact.email}`}>{site.contact.email}</a>}
+    </footer>
+    <script>
+      import '../scripts/motion.ts'
+    </script>
+  </body>
+</html>

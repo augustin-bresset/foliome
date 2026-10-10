@@ -1,0 +1,22 @@
+{
+  "name": "@foliome/demo",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "edit": "astro dev --host",
+    "build": "astro build",
+    "preview": "astro preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@foliome/astro": "*",
+    "@fontsource-variable/big-shoulders": "^5.3.0",
+    "@fontsource-variable/hanken-grotesk": "^5.3.0",
+    "@google/model-viewer": "^4.3.1",
+    "astro": "^7.3.8",
+    "gsap": "^3.15.0",
+    "lenis": "^1.3.26"
+  }
+}

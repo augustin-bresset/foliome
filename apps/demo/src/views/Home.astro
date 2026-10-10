@@ -1,0 +1,78 @@
+---
+import { edit, richText, srcset, url } from '@foliome/astro/content'
+import { load } from '../content'
+import { link, type Locale, ui } from '../i18n'
+import Base from '../layouts/Base.astro'
+
+interface Props {
+  locale: Locale
+}
+
+const { locale } = Astro.props
+const { site, projects } = await load(locale)
+const t = ui(locale)
+---
+
+<Base locale={locale}>
+  <section class="index" id="projets">
+    <p class="baseline" {...edit('site.baseline')}>{site.baseline}</p>
+
+    {projects.length === 0 && <p class="empty">{t.empty}</p>}
+
+    <ul class="rows">
+      {
+        projects.map((p) => (
+          <li class="row" data-row={p.id} {...edit(`projects.${p.id}`)}>
+            <a class="row-link" href={link(locale, `/projets/${p.slug}`)}>
+              <span class="row-title">
+                <span class="row-title-in" transition:name={`title-${p.id}`} {...edit(`projects.${p.id}.title`)}>{p.title}</span>
+              </span>
+              <span class="row-meta">
+                <span {...edit(`projects.${p.id}.place`)}>{p.place}</span>
+                <span {...edit(`projects.${p.id}.year`)}>{p.year}</span>
+              </span>
+            </a>
+            {
+              p.cover && (
+                <img class="row-cover" src={url(p.cover)} srcset={srcset(p.cover)} sizes="100vw" width={p.cover.width} height={p.cover.height} alt="" loading="lazy" />
+              )
+            }
+          </li>
+        ))
+      }
+    </ul>
+
+    <!-- Follows the pointer and shows the cover of the hovered project. -->
+    <div class="preview" aria-hidden="true">
+      {projects.map((p) => p.cover && <img data-for={p.id} src={url(p.cover)} srcset={srcset(p.cover)} sizes="28rem" alt="" />)}
+    </div>
+  </section>
+
+  <section class="atelier" id="atelier">
+    <div class="atelier-figure" {...edit('site.portrait')}>
+      {
+        site.portrait && (
+          <img
+            src={url(site.portrait)}
+            srcset={srcset(site.portrait)}
+            sizes="(min-width: 48rem) 40vw, 100vw"
+            width={site.portrait.width}
+            height={site.portrait.height}
+            alt=""
+            loading="lazy"
+          />
+        )
+      }
+    </div>
+    <div class="atelier-body">
+      <h2 class="atelier-title">{t.theStudio}</h2>
+      <div class="prose" {...edit('site.about')} set:html={richText(site.about)} />
+      <!-- Clicking between the lines edits the whole contact group. -->
+      <address class="contact" {...edit('site.contact')}>
+        <span class="contact-address" {...edit('site.contact.address')}>{site.contact.address}</span>
+        <a href={`mailto:${site.contact.email}`} {...edit('site.contact.email')}>{site.contact.email}</a>
+        <a href={`tel:${site.contact.phone.replace(/\s/g, '')}`} {...edit('site.contact.phone')}>{site.contact.phone}</a>
+      </address>
+    </div>
+  </section>
+</Base>

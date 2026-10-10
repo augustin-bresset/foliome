@@ -1,0 +1,571 @@
+/*
+ * Atelier Morane: an architecture practice shown the way it works, as a
+ * blueline print. Everything is drawn in one blue ink on cool paper; there is
+ * no black. Titles are set tall and narrow, like elevations. The only second
+ * colour is the red pencil used to mark up a print: hover and focus.
+ */
+:root {
+  --papier: #eceff3;
+  --lavis: #dbe1ee;
+  --encre: #2a36a8;
+  --encre-dense: #1a2170;
+  --crayon: #e2462c;
+
+  --display: 'Big Shoulders Variable', 'Arial Narrow', sans-serif;
+  --text: 'Hanken Grotesk Variable', system-ui, sans-serif;
+
+  --gutter: clamp(1rem, 3vw, 2.5rem);
+  --title: clamp(2.75rem, 8.6vw, 9rem);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+html {
+  background: var(--papier);
+  color: var(--encre-dense);
+  font-family: var(--text);
+  line-height: 1.55;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  min-height: 100vh;
+}
+
+img,
+video {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--crayon);
+  outline-offset: 3px;
+}
+
+::selection {
+  background: var(--encre);
+  color: var(--papier);
+}
+
+.prose {
+  max-width: 62ch;
+  font-size: 1.125rem;
+}
+
+.prose p + p {
+  margin-top: 1em;
+}
+
+.prose strong {
+  font-weight: 650;
+}
+
+.prose a {
+  text-decoration: underline 1.5px var(--crayon);
+  text-underline-offset: 0.2em;
+}
+
+/* Header and footer */
+
+.top,
+.bottom {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1.25rem var(--gutter);
+  color: var(--encre);
+}
+
+.top {
+  font-weight: 500;
+}
+
+.top-nav {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.bottom {
+  flex-wrap: wrap;
+  padding-block: 2rem;
+  font-size: 0.875rem;
+}
+
+.top a:hover,
+.bottom a:hover,
+.contact a:hover {
+  text-decoration: underline 2px var(--crayon);
+  text-underline-offset: 0.25em;
+}
+
+/* Home: the list of projects is the page */
+
+.index {
+  padding: clamp(3rem, 12vh, 8rem) var(--gutter) clamp(4rem, 10vh, 8rem);
+}
+
+.baseline {
+  max-width: 34ch;
+  margin-bottom: clamp(2.5rem, 8vh, 5.5rem);
+  color: var(--encre);
+  font-size: clamp(1.125rem, 1.6vw, 1.5rem);
+  line-height: 1.35;
+}
+
+.empty {
+  color: var(--encre);
+}
+
+.rows {
+  padding: 0;
+  list-style: none;
+}
+
+.row-link {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  column-gap: 2rem;
+  color: var(--encre);
+  transition: color 0.25s;
+}
+
+.row-title,
+.project-title,
+.next-title,
+.atelier-title {
+  font-family: var(--display);
+  font-weight: 500;
+  line-height: 0.92;
+  text-transform: uppercase;
+}
+
+/* Clips the title while it rises into place on load. */
+.row-title {
+  display: block;
+  overflow: hidden;
+  font-size: var(--title);
+}
+
+.row-title-in {
+  display: inline-block;
+}
+
+.row-meta {
+  display: flex;
+  gap: 1.5rem;
+  font-size: 0.9375rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.row-cover {
+  display: none;
+}
+
+.preview {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 5;
+  width: clamp(16rem, 26vw, 28rem);
+  aspect-ratio: 16 / 11;
+  overflow: hidden;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  /* The drawing lies over the titles like a sheet of tracing paper. */
+  mix-blend-mode: multiply;
+}
+
+.preview img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+}
+
+.preview img.is-on {
+  opacity: 1;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .rows:hover .row:not(:hover) .row-link {
+    color: color-mix(in srgb, var(--encre) 26%, var(--papier));
+  }
+}
+
+/* Without a pointer there is nothing to hover: covers sit in the list. */
+@media (hover: none), (pointer: coarse) {
+  .preview {
+    display: none;
+  }
+
+  .row + .row {
+    margin-top: 2.5rem;
+  }
+
+  .row-link {
+    grid-template-columns: 1fr;
+    row-gap: 0.5rem;
+  }
+
+  .row-cover {
+    display: block;
+    width: 100%;
+    margin-top: 0.75rem;
+    aspect-ratio: 16 / 10;
+    object-fit: cover;
+  }
+}
+
+/* Home: the practice */
+
+.atelier {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: var(--gutter);
+  align-items: start;
+  padding: clamp(3rem, 10vh, 8rem) var(--gutter);
+}
+
+.atelier-figure {
+  grid-column: 1 / span 5;
+  background: var(--lavis);
+}
+
+.atelier-figure:empty {
+  aspect-ratio: 4 / 3;
+}
+
+.atelier-figure img {
+  width: 100%;
+}
+
+.atelier-body {
+  grid-column: 7 / span 6;
+}
+
+.atelier-title {
+  margin-bottom: 1.5rem;
+  color: var(--encre);
+  font-size: clamp(2.5rem, 6vw, 5rem);
+}
+
+.contact {
+  display: grid;
+  justify-items: start;
+  gap: 0.25rem;
+  margin-top: 2.5rem;
+  color: var(--encre);
+  font-style: normal;
+}
+
+.contact-address {
+  margin-bottom: 0.75rem;
+  white-space: pre-line;
+}
+
+/* Project page */
+
+.project-head {
+  padding: clamp(2rem, 8vh, 5rem) var(--gutter) 0;
+}
+
+.project-title {
+  margin-bottom: clamp(1.5rem, 4vh, 3rem);
+  color: var(--encre);
+  font-size: clamp(3.25rem, 13.5vw, 14rem);
+  line-height: 0.88;
+  text-wrap: balance;
+}
+
+.project-intro {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: var(--gutter);
+  align-items: start;
+  padding: 0 var(--gutter) clamp(2.5rem, 6vh, 5rem);
+}
+
+.summary {
+  grid-column: 1 / span 7;
+  max-width: 28ch;
+  font-size: clamp(1.25rem, 2.1vw, 1.875rem);
+  line-height: 1.28;
+}
+
+.facts {
+  grid-column: 9 / span 4;
+  display: grid;
+  gap: 1.25rem;
+}
+
+/* Set like the title block in the corner of a drawing sheet. */
+.cartouche {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  border: 1.5px solid var(--encre);
+  color: var(--encre);
+}
+
+.cartouche dt,
+.cartouche dd {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--encre);
+}
+
+.cartouche dt {
+  font-size: 0.8125rem;
+  line-height: 1.9;
+}
+
+.cartouche dd {
+  border-left: 1px solid var(--encre);
+  font-weight: 500;
+}
+
+.cartouche dt:nth-last-of-type(1),
+.cartouche dd:nth-last-of-type(1) {
+  border-bottom: 0;
+}
+
+.credits {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0;
+  color: var(--encre);
+  font-size: 0.875rem;
+  list-style: none;
+}
+
+.credits li {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.credits li span:last-child {
+  font-weight: 500;
+}
+
+.cover {
+  height: clamp(18rem, 72vh, 52rem);
+  overflow: hidden;
+  background: var(--lavis);
+}
+
+/* Taller than its frame, so it can drift while the page scrolls. */
+.cover img {
+  width: 100%;
+  height: 112%;
+  object-fit: cover;
+}
+
+/* The page body: blocks stacked by the artist. */
+.sections {
+  display: grid;
+  gap: clamp(3rem, 8vh, 6rem);
+  padding: clamp(3rem, 8vh, 6rem) 0 clamp(4rem, 10vh, 8rem);
+}
+
+.section-text {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: var(--gutter);
+  padding: 0 var(--gutter);
+}
+
+.section-text .prose {
+  grid-column: 5 / span 7;
+}
+
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: clamp(2rem, 5vw, 5rem) var(--gutter);
+  align-items: start;
+  padding: 0 var(--gutter);
+}
+
+.quote {
+  padding: 0 var(--gutter);
+  color: var(--encre);
+}
+
+.quote blockquote {
+  max-width: 16ch;
+  font-family: var(--display);
+  font-size: clamp(2.25rem, 6vw, 5.5rem);
+  font-weight: 500;
+  line-height: 0.95;
+  text-transform: uppercase;
+  text-wrap: balance;
+}
+
+.quote figcaption {
+  margin-top: 1rem;
+  font-size: 0.9375rem;
+}
+
+.media {
+  grid-column: 1 / -1;
+}
+
+.media img,
+.media video {
+  width: 100%;
+  background: var(--lavis);
+}
+
+.media audio {
+  width: 100%;
+}
+
+.media figcaption {
+  margin-top: 0.625rem;
+  color: var(--encre);
+  font-size: 0.875rem;
+}
+
+.media model-viewer {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 10;
+  background: var(--lavis);
+}
+
+.doc {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 1rem 1.25rem;
+  border: 1.5px solid var(--encre);
+  color: var(--encre);
+  transition:
+    background-color 0.2s,
+    color 0.2s;
+}
+
+.doc:hover {
+  background: var(--encre);
+  color: var(--papier);
+}
+
+.doc-ext {
+  font-family: var(--display);
+  font-size: 2rem;
+  font-weight: 600;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.doc-name {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.doc-size {
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.next {
+  display: block;
+  padding: clamp(3rem, 8vh, 6rem) var(--gutter) clamp(4rem, 10vh, 8rem);
+  color: var(--encre);
+}
+
+.next-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.9375rem;
+}
+
+.next-title {
+  display: block;
+  font-size: var(--title);
+}
+
+.next:hover .next-title {
+  text-decoration: underline 0.06em var(--crayon);
+  text-underline-offset: 0.08em;
+}
+
+/* Drawings alternate sides down the page; documents sit in the middle. */
+@media (min-width: 48rem) {
+  .media.is-wide {
+    grid-column: 1 / span 8;
+  }
+
+  .media.is-wide:nth-child(even) {
+    grid-column: 5 / span 8;
+  }
+
+  .media.is-tall {
+    grid-column: 2 / span 5;
+  }
+
+  .media.is-tall:nth-child(even) {
+    grid-column: 7 / span 5;
+  }
+
+  .media.is-model {
+    grid-column: 3 / span 8;
+  }
+
+  .media.is-pdf,
+  .media.is-file,
+  .media.is-audio {
+    grid-column: 4 / span 6;
+  }
+}
+
+@media (max-width: 47.99rem) {
+  .atelier-figure,
+  .atelier-body,
+  .summary,
+  .facts,
+  .section-text .prose {
+    grid-column: 1 / -1;
+  }
+
+  .row-link {
+    grid-template-columns: 1fr;
+    row-gap: 0.25rem;
+  }
+
+  .row + .row {
+    margin-top: 1.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cover img {
+    height: 100%;
+  }
+
+  .row-link,
+  .doc {
+    transition: none;
+  }
+}

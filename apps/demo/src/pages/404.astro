@@ -1,0 +1,13 @@
+---
+import { ui } from '../i18n'
+import Base from '../layouts/Base.astro'
+
+const t = ui('fr')
+---
+
+<Base locale="fr" title="Page introuvable">
+  <section class="index">
+    <p class="baseline">{t.notFound}</p>
+    <a class="next-title" href="/">{t.back}</a>
+  </section>
+</Base>
