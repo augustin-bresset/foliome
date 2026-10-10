@@ -1,0 +1,104 @@
+---
+import { edit, richText, srcset, url } from '@foliome/astro/content'
+import Media from '../components/Media.astro'
+import { load, type Project } from '../content'
+import { link, type Locale, ui } from '../i18n'
+import Base from '../layouts/Base.astro'
+
+interface Props {
+  locale: Locale
+  slug: string | undefined
+}
+
+const { locale, slug } = Astro.props
+const { projects } = await load(locale)
+const index = projects.findIndex((project) => project.slug === slug)
+const p = projects[index] as Project
+const next = projects.length > 1 ? projects[(index + 1) % projects.length] : undefined
+const t = ui(locale)
+
+const root = `projects.${p.id}`
+const zone = (field: string) => edit(`${root}.${field}`)
+---
+
+<Base locale={locale} title={p.title} description={p.summary}>
+  <article class="project">
+    <header class="project-head">
+      <h1 class="project-title" transition:name={`title-${p.id}`} {...zone('title')}>{p.title}</h1>
+    </header>
+
+    <div class="project-intro">
+      <p class="summary" {...zone('summary')}>{p.summary}</p>
+      <aside class="facts">
+        <!-- The title block of a drawing sheet. Clicking between its cells edits the whole project. -->
+        <dl class="cartouche" {...edit(root)}>
+          <dt>{t.place}</dt>
+          <dd {...zone('place')}>{p.place}</dd>
+          <dt>{t.year}</dt>
+          <dd {...zone('year')}>{p.year}</dd>
+          <dt>{t.program}</dt>
+          <dd {...zone('program')}>{p.program}</dd>
+          <dt>{t.surface}</dt>
+          <dd {...zone('surface')}>{p.surface}</dd>
+        </dl>
+        <!-- A list inside the project: the zone is the list, each line is one of its items. -->
+        <ul class="credits" {...zone('credits')}>
+          {
+            p.credits.map((credit) => (
+              <li {...zone(`credits.${credit.id}`)}>
+                <span>{credit.role}</span>
+                <span>{credit.name}</span>
+              </li>
+            ))
+          }
+        </ul>
+      </aside>
+    </div>
+
+    <div class="cover" {...zone('cover')}>
+      {p.cover && <img src={url(p.cover)} srcset={srcset(p.cover)} sizes="100vw" width={p.cover.width} height={p.cover.height} alt="" />}
+    </div>
+
+    <!-- The page body is whatever blocks the artist stacked, in their order. -->
+    <div class="sections" {...zone('sections')}>
+      {
+        p.sections.map((section) => {
+          const at = `sections.${section.id}`
+          if (section.type === 'texte') {
+            return (
+              <div class="section-text">
+                <div class="prose" {...zone(`${at}.text`)} set:html={richText(section.text)} />
+              </div>
+            )
+          }
+          if (section.type === 'galerie') {
+            return (
+              <div class="gallery" {...zone(`${at}.files`)}>
+                {section.files.map((asset) => (
+                  <Media asset={asset} />
+                ))}
+              </div>
+            )
+          }
+          if (section.type === 'citation') {
+            return (
+              <figure class="quote" {...zone(at)}>
+                <blockquote {...zone(`${at}.quote`)}>{section.quote}</blockquote>
+                <figcaption {...zone(`${at}.author`)}>{section.author}</figcaption>
+              </figure>
+            )
+          }
+        })
+      }
+    </div>
+  </article>
+
+  {
+    next && (
+      <a class="next" href={link(locale, `/projets/${next.slug}`)}>
+        <span class="next-label">{t.next}</span>
+        <span class="next-title" transition:name={`title-${next.id}`}>{next.title}</span>
+      </a>
+    )
+  }
+</Base>

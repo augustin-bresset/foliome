@@ -1,0 +1,51 @@
+---
+import { type Asset, extOf, formatSize, srcset, url } from '@foliome/astro/content'
+
+// One uploaded file, shown the best way its format allows. Anything the
+// browser cannot display becomes a download.
+interface Props {
+  asset: Asset
+}
+
+const { asset } = Astro.props
+const src = url(asset)
+const ext = extOf(asset.name)
+const view3d = asset.kind === 'model' && (ext === 'glb' || ext === 'gltf')
+const card = asset.kind === 'pdf' || asset.kind === 'file' || (asset.kind === 'model' && !view3d)
+const shape = asset.width && asset.height && asset.height > asset.width ? 'is-tall' : 'is-wide'
+const framed = asset.kind === 'image' || asset.kind === 'video'
+---
+
+<figure class:list={['media', `is-${asset.kind}`, framed && shape]}>
+  {
+    asset.kind === 'image' && (
+      <img
+        src={src}
+        srcset={srcset(asset)}
+        sizes={shape === 'is-tall' ? '(min-width: 48rem) 42vw, 100vw' : '(min-width: 48rem) 66vw, 100vw'}
+        width={asset.width}
+        height={asset.height}
+        alt={asset.caption ?? ''}
+        loading="lazy"
+        decoding="async"
+      />
+    )
+  }
+  {
+    asset.kind === 'video' && (
+      <video src={src} poster={asset.poster && url(asset.poster)} width={asset.width} height={asset.height} controls playsinline preload="none" />
+    )
+  }
+  {asset.kind === 'audio' && <audio src={src} controls preload="metadata" />}
+  {view3d && <model-viewer src={src} alt={asset.caption ?? asset.name} camera-controls camera-orbit="35deg 68deg auto" shadow-intensity="0.5" />}
+  {
+    card && (
+      <a class="doc" href={src} download={asset.kind === 'pdf' ? undefined : asset.name} target={asset.kind === 'pdf' ? '_blank' : undefined}>
+        <span class="doc-ext">{ext || 'fichier'}</span>
+        <span class="doc-name">{asset.name}</span>
+        <span class="doc-size">{formatSize(asset.size)}</span>
+      </a>
+    )
+  }
+  {asset.caption && <figcaption>{asset.caption}</figcaption>}
+</figure>
