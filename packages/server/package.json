@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./media": "./src/media.ts"
   },
   "types": "./src/index.ts",
   "scripts": {
@@ -12,7 +13,9 @@
   },
   "dependencies": {
     "@foliome/core": "*",
-    "hono": "^4.13.13"
+    "hono": "^4.13.13",
+    "sharp": "^0.35.5",
+    "heic-convert": "^2.1.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.0"
