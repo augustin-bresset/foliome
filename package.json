@@ -1,0 +1,26 @@
+{
+  "name": "foliome",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "dev": "npm run build -w @foliome/editor && npm run dev -w @foliome/demo",
+    "edit": "npm run build -w @foliome/editor && npm run edit -w @foliome/demo",
+    "build": "npm run build -w @foliome/editor && npm run build -w @foliome/demo",
+    "seed": "node scripts/seed-demo.mjs",
+    "test": "node --test packages/*/test/*.test.ts",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test:e2e": "node tests/e2e.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "playwright-core": "^1.64.0",
+    "sharp": "^0.35.5"
+  }
+}
