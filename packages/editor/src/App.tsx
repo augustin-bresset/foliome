@@ -172,7 +172,16 @@ export function App({ host, config, initial, onQuit }: Props) {
     setBusy('undo')
     try {
       const { ok } = await api.undo()
-      if (ok) return refresh('Dernière modification annulée')
+      if (ok) {
+        // Undoing the creation of a page while standing on it leaves nothing here to reload: go back to the home page, in the same language.
+        const gone = await fetch(location.href, { method: 'HEAD' }).then(
+          (response) => response.status === 404,
+          () => false,
+        )
+        const first = location.pathname.split('/').find(Boolean)
+        const home = first && schema.locales?.slice(1).includes(first) ? `/${first}` : '/'
+        return refresh('Dernière modification annulée', gone ? home : undefined)
+      }
       setToast('Rien à annuler')
     } catch (err) {
       setToast(explain(err))

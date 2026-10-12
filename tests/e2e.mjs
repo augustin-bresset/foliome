@@ -453,12 +453,8 @@ try {
   await ed('#f-title').fill('Footbridge')
   await save()
   check('a project created from the English side opens in English', pathname() === '/en/projets/footbridge')
-  await page.locator('.cartouche dt').first().click()
-  await pause()
-  await ed('.item-actions .link.is-danger').click()
-  await pause(200)
-  await reloads(() => ed('.panel-foot .btn.is-danger').click())
-  check('and deleting it returns to the English home', pathname().replace(/\/$/, '') === '/en' && content().projects.length === 4)
+  await reloads(() => bar('Annuler').click())
+  check('undoing its creation from its own page returns to the English home', pathname().replace(/\/$/, '') === '/en' && content().projects.length === 4)
 
   /* Putting the site online */
   check('"Mettre en ligne" is offered when a command is configured', (await bar('Mettre en ligne').count()) === 1)
@@ -521,8 +517,8 @@ await rm(path.join(DEMO, '.foliome', 'history'), { recursive: true, force: true 
 await rm(path.join(DEMO, 'dist'), { recursive: true, force: true })
 await rm(tmp, { recursive: true, force: true })
 
-// The wrong code on purpose, and the deleted project's page, are expected.
-const expected = [/401 POST \/_foliome\/login/, /status of 401/, /404 GET \/projets\/passerelle-du-giffre/, /status of 404/]
+// Expected: the wrong code typed on purpose, the deleted project's page, and the editor checking whether an undone page still exists.
+const expected = [/401 POST \/_foliome\/login/, /status of 401/, /404 GET \/projets\/passerelle-du-giffre/, /404 HEAD \/en\/projets\/footbridge/, /status of 404/]
 const unexpected = [...new Set(problems)].filter((p) => !expected.some((e) => e.test(p)))
 const failed = results.filter((r) => !r.startsWith('PASS') && !r.startsWith('SKIP'))
 console.log(results.join('\n'))
