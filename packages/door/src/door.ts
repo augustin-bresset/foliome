@@ -45,8 +45,10 @@ const call = (name: string, port: number, path: string, headers: Record<string, 
 function readBody(req: IncomingMessage) {
   return new Promise<string | null>((done, fail) => {
     let body = ''
+    let size = 0
     req.on('data', (chunk: Buffer) => {
-      if (body.length > LONGEST_BODY) done(null)
+      size += chunk.length
+      if (size > LONGEST_BODY) done(null)
       else body += chunk.toString()
     })
     req.on('end', () => done(body))
