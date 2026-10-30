@@ -1,0 +1,1089 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Foliome</title>
+<meta name="description" content="Un site de portfolio dessiné sur mesure, que vous mettez à jour vous-même : cliquez sur ce que vous voulez changer, un panneau s’ouvre juste à côté.">
+<meta name="theme-color" content="#ffdf3d">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23ffdf3d'/%3E%3Cpath d='M9 7h15v5H15v4h8v5h-8v5H9z' fill='%231a1fa8'/%3E%3C/svg%3E">
+<link rel="preload" href="fonts/syne-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+@font-face {
+  font-family: 'Syne';
+  src: url('fonts/syne-latin-wght-normal.woff2') format('woff2');
+  font-weight: 400 800;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Spectral';
+  src: url('fonts/spectral-latin-400-normal.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Spectral';
+  src: url('fonts/spectral-latin-600-normal.woff2') format('woff2');
+  font-weight: 600;
+  font-display: swap;
+}
+
+/* The page is a sheet of coloured paper printed in one ink. Both can be changed by the visitor, so nothing below names a colour. */
+:root {
+  color-scheme: light;
+  --sheet: #ffdf3d;
+  --print: #1a1fa8;
+  /* The editor's own colours: a tool laid over the artwork, not part of it. */
+  --ink: #17171c;
+  --paper: #fff;
+  --fog: #f2f2f5;
+  --line: #d8d8df;
+  --muted: #6b6b76;
+  --guide: #e5197d;
+  --guide-deep: #b80f62;
+  --gutter: clamp(16px, 3.4vw, 48px);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--sheet);
+  color: var(--print);
+  font: 400 clamp(1.1rem, 0.95rem + 0.5vw, 1.35rem)/1.55 'Spectral', Georgia, serif;
+}
+
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+
+:focus-visible {
+  outline: 2px solid var(--guide);
+  outline-offset: 2px;
+}
+
+/* Top of the sheet */
+
+.top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 14px var(--gutter);
+}
+
+.brand {
+  color: inherit;
+  font: 800 1.15rem/1 'Syne', sans-serif;
+  text-decoration: none;
+}
+
+.signin {
+  padding: 8px 15px;
+  border: 2px solid var(--print);
+  border-radius: 999px;
+  background: none;
+  font: 600 0.95rem/1.2 'Syne', sans-serif;
+}
+
+.signin:hover {
+  background: var(--print);
+  color: var(--sheet);
+}
+
+/* Each sheet stays put once read, and the next one is laid over it. */
+.sheet-of-paper {
+  position: sticky;
+  top: 0;
+  background: var(--sheet);
+  box-shadow: 0 -10px 24px -14px rgb(0 0 0 / 0.3);
+}
+
+/* First sheet: the visitor's name, across its whole width */
+
+.first {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100svh - 62px);
+  padding: 34px var(--gutter) var(--gutter);
+  box-shadow: none;
+}
+
+.name {
+  margin: 0;
+  font: 800 12vw/1 'Syne', sans-serif;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+}
+
+.role {
+  margin: 0.5em 0 0;
+  font-size: clamp(1.25rem, 1rem + 1.1vw, 1.9rem);
+  line-height: 1.3;
+}
+
+.what {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px 64px;
+  margin-top: auto;
+  padding-top: 48px;
+}
+
+.what p { margin: 0; }
+
+.pitch {
+  flex: 1 1 12em;
+  max-width: 14em;
+  font: 700 clamp(2.1rem, 1rem + 4.5vw, 5.4rem)/1.06 'Syne', sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.try {
+  flex: 0 1 19em;
+  font-size: 1rem;
+  line-height: 1.45;
+}
+
+/* Editable zones, marked the way the editor marks them */
+
+.zone {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  white-space: inherit;
+}
+
+.zone:hover,
+.zone.is-reached,
+.zone.is-active,
+.is-waiting .zone-first {
+  box-shadow: 0 0 0 2px var(--guide), 0 0 0 3.5px rgb(255 255 255 / 0.9);
+}
+
+.zone.is-active {
+  box-shadow: 0 0 0 2px var(--guide-deep), 0 0 0 3.5px #fff;
+}
+
+.zone::before {
+  content: attr(data-tag);
+  position: absolute;
+  left: -2px;
+  bottom: calc(100% + 2px);
+  display: none;
+  padding: 4px 9px;
+  border-radius: 6px 6px 6px 0;
+  background: var(--guide-deep);
+  color: #fff;
+  font: 600 12px/1.45 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.zone:hover::before,
+.zone.is-reached::before,
+.is-waiting .zone-first::before {
+  display: block;
+}
+
+.zone.is-active::before { display: none; }
+
+.dot {
+  display: inline-block;
+  width: 0.62em;
+  height: 0.62em;
+  margin-right: 0.4em;
+  border-radius: 50%;
+  background: var(--sheet);
+  box-shadow: 0 0 0 2px var(--print);
+}
+
+/* Second sheet, printed the other way round */
+
+.second {
+  padding: clamp(56px, 9vw, 120px) var(--gutter);
+  background: var(--print);
+  color: var(--sheet);
+}
+
+.second h2,
+.third h2,
+.fourth h2 {
+  max-width: 15em;
+  margin: 0 0 1.1em;
+  font: 800 clamp(2rem, 1.1rem + 3.4vw, 4rem)/1.05 'Syne', sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 32px clamp(24px, 4vw, 64px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+
+.steps li { counter-increment: step; }
+
+.steps li::before {
+  content: counter(step);
+  display: block;
+  margin-bottom: 0.1em;
+  font: 800 clamp(4rem, 2rem + 8vw, 9rem)/1 'Syne', sans-serif;
+}
+
+.steps h3 {
+  margin: 0 0 0.4em;
+  font: 700 1.3em/1.2 'Syne', sans-serif;
+}
+
+.steps p {
+  max-width: 28em;
+  margin: 0;
+}
+
+/* Third sheet */
+
+.third {
+  padding: clamp(56px, 9vw, 120px) var(--gutter) clamp(40px, 6vw, 80px);
+}
+
+.cares {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px clamp(24px, 5vw, 80px);
+  margin: 0;
+}
+
+.cares dt {
+  font: 700 1.2em/1.25 'Syne', sans-serif;
+}
+
+.cares dd {
+  max-width: 26em;
+  margin: 0.25em 0 0;
+}
+
+/* Last sheet, printed the other way round again */
+
+.fourth {
+  padding: clamp(56px, 9vw, 120px) var(--gutter) clamp(32px, 4vw, 48px);
+  background: var(--print);
+  color: var(--sheet);
+}
+
+.fourth h2 { margin-bottom: 0.5em; }
+
+.fourth p {
+  max-width: 34em;
+  margin: 0 0 1em;
+}
+
+.fourth a { color: inherit; }
+
+.mail {
+  display: inline-block;
+  margin: 0.3em 0 0.6em;
+  /* The address keeps to one line: it is about 19.8em wide. */
+  font: 800 min(calc((100vw - 2 * var(--gutter)) / 20.6), 5rem)/1.1 'Syne', sans-serif;
+  letter-spacing: -0.02em;
+  text-underline-offset: 0.12em;
+  text-decoration-thickness: 0.06em;
+}
+
+.fourth .signin { border-color: var(--sheet); }
+
+.fourth .signin:hover {
+  background: var(--sheet);
+  color: var(--print);
+}
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-top: clamp(56px, 8vw, 96px);
+}
+
+.foot-end {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+}
+
+.legal { font-size: 1rem; }
+
+.foot .brand { font-size: clamp(2.4rem, 1rem + 6vw, 6rem); letter-spacing: -0.03em; }
+
+/* The editor's panel */
+
+.panel {
+  position: fixed;
+  z-index: 20;
+  left: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  width: min(360px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  border-radius: 14px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 0 0 1px rgb(23 23 28 / 0.1), 0 18px 44px -12px rgb(23 23 28 / 0.4);
+  font: 14px/1.45 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  animation: appear 0.14s ease-out;
+}
+
+.panel[hidden] { display: none; }
+
+@keyframes appear {
+  from { opacity: 0; transform: translateY(4px) scale(0.99); }
+}
+
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 12px 2px 16px;
+}
+
+.panel-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.panel-context {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.close {
+  position: relative;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+}
+
+.close:hover { background: var(--fog); }
+
+.close::before,
+.close::after {
+  content: '';
+  position: absolute;
+  left: 7px;
+  right: 7px;
+  top: 13px;
+  height: 1.6px;
+  border-radius: 1px;
+  background: var(--ink);
+  transform: rotate(45deg);
+}
+
+.close::after { transform: rotate(-45deg); }
+
+.panel-form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin: 0;
+}
+
+.panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px 16px 4px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.input {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: var(--fog);
+  font-size: 15px;
+  outline: none;
+}
+
+.input:hover { border-color: var(--line); }
+
+.input:focus-visible {
+  border-color: var(--guide);
+  background: var(--paper);
+  box-shadow: 0 0 0 3px rgb(229 25 125 / 0.18);
+  outline: none;
+}
+
+.color-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.color-well {
+  flex: none;
+  width: 44px;
+  height: 38px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--paper);
+  cursor: pointer;
+}
+
+.color-well::-webkit-color-swatch-wrapper { padding: 0; }
+.color-well::-webkit-color-swatch { border: none; border-radius: 6px; }
+.color-well::-moz-color-swatch { border: none; border-radius: 6px; }
+
+.color-code { text-transform: lowercase; font-variant-numeric: tabular-nums; }
+
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.swatch {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid rgb(0 0 0 / 0.14);
+  border-radius: 50%;
+}
+
+.swatch[aria-pressed='true'] {
+  box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--ink);
+}
+
+.panel-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px 16px;
+}
+
+.btn {
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--paper);
+  font-weight: 600;
+}
+
+.btn:hover { background: var(--fog); }
+
+.btn.is-primary {
+  border-color: var(--guide-deep);
+  background: var(--guide-deep);
+  color: #fff;
+}
+
+.btn.is-primary:hover { background: #9c0b52; }
+
+.btn:disabled { opacity: 0.45; cursor: default; }
+
+.error {
+  margin: 0;
+  color: #b3261e;
+  font-size: 13.5px;
+}
+
+.toast {
+  position: fixed;
+  z-index: 30;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 32px);
+  padding: 8px 15px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  font: 550 14px/1.45 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.14), 0 12px 30px -10px rgb(0 0 0 / 0.55);
+}
+
+.toast[hidden] { display: none; }
+
+.whole { white-space: nowrap; }
+
+/* The hand that shows how it works, until the visitor takes over. */
+.ghost {
+  position: fixed;
+  z-index: 40;
+  left: 0;
+  top: 0;
+  width: 26px;
+  height: 26px;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.35));
+  transform: translate(var(--ghost-x, 72vw), var(--ghost-y, 78vh));
+  transition: transform 0.72s cubic-bezier(0.65, 0, 0.2, 1);
+}
+
+.ghost[hidden] { display: none; }
+
+.ghost svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: 4px 3px;
+  transition: transform 0.1s ease-out;
+}
+
+.ghost.is-pressing svg { transform: scale(0.78); }
+
+/* A new paper spreads from the swatch that was chosen. */
+::view-transition-old(root) { animation: none; }
+
+::view-transition-new(root) {
+  animation: spread 0.72s cubic-bezier(0.7, 0, 0.2, 1);
+}
+
+@keyframes spread {
+  from { clip-path: circle(0 at var(--spread-x, 50%) var(--spread-y, 50%)); }
+  to { clip-path: circle(150vmax at var(--spread-x, 50%) var(--spread-y, 50%)); }
+}
+
+@media (max-width: 800px) {
+  .steps, .cares { grid-template-columns: minmax(0, 1fr); }
+  .steps li { display: grid; grid-template-columns: 5.4rem minmax(0, 1fr); column-gap: 14px; }
+  .steps li::before { grid-row: span 2; font-size: 4.5rem; }
+}
+
+/* On a phone the panel is a sheet at the bottom, as in the editor. */
+@media (max-width: 600px) {
+  .first { min-height: 0; }
+  .panel {
+    left: 0 !important;
+    top: auto !important;
+    bottom: 0;
+    width: 100%;
+    max-height: 70vh;
+    border-radius: 14px 14px 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel { animation: none; }
+  .sheet-of-paper { position: static; }
+  ::view-transition-new(root) { animation: none; }
+}
+</style>
+</head>
+<body class="is-waiting">
+
+<header class="top">
+  <a class="brand" href="/">Foliome</a>
+  <button type="button" class="signin" id="signin">Accéder à mon site</button>
+</header>
+
+<main>
+  <section class="sheet-of-paper first">
+    <h1 class="name" id="name-line"><button type="button" class="zone zone-first" id="name" data-tag="Votre nom : cliquez pour changer"><span id="name-text">Votre nom</span></button></h1>
+    <p class="role"><button type="button" class="zone" id="role" data-tag="Votre activité">Votre discipline, votre ville</button></p>
+    <div class="what">
+      <p class="pitch">Un site de portfolio dessiné sur mesure, que vous mettez à jour <span class="whole">vous-même</span>.</p>
+      <p class="try"><button type="button" class="zone" id="sheet" data-tag="Couleur du papier"><span class="dot"></span>Changer la couleur de la page</button><br>Cette page se modifie comme votre site : cliquez sur un élément, un panneau s’ouvre juste à côté.</p>
+    </div>
+  </section>
+
+  <section class="sheet-of-paper second">
+    <h2>Votre site change quand vous le décidez.</h2>
+    <ol class="steps">
+      <li>
+        <h3>Il est créé pour vous</h3>
+        <p>Je le dessine et je le code sur mesure, avec ses animations et son caractère. Rien ne sort d’un modèle.</p>
+      </li>
+      <li>
+        <h3>Vous le modifiez de chez vous</h3>
+        <p>Ouvrez-le avec votre code d’accès, sur ordinateur ou sur téléphone, sans rien installer. Cliquez sur un texte, une image, une couleur.</p>
+      </li>
+      <li>
+        <h3>Vous le mettez en ligne</h3>
+        <p>Un bouton, et vos visiteurs voient la nouvelle version. Vous n’avez personne à prévenir.</p>
+      </li>
+    </ol>
+  </section>
+
+  <section class="sheet-of-paper third">
+    <h2>Foliome s’occupe du reste.</h2>
+    <dl class="cares">
+      <div>
+        <dt>Vos photos</dt>
+        <dd>Envoyez-les telles quelles, même depuis votre téléphone. Elles sont redressées, allégées, et leur position GPS est retirée.</dd>
+      </div>
+      <div>
+        <dt>Tous vos fichiers</dt>
+        <dd>PDF, sons, modèles 3D, archives : tous les formats sont acceptés.</dd>
+      </div>
+      <div>
+        <dt>Vos retours en arrière</dt>
+        <dd>Annulez jusqu’à cent modifications, si le résultat ne vous plaît pas.</dd>
+      </div>
+      <div>
+        <dt>Vos langues</dt>
+        <dd>Un onglet par langue, à côté de chaque texte à traduire.</dd>
+      </div>
+    </dl>
+  </section>
+
+  <section class="sheet-of-paper fourth">
+    <h2>Un projet de site&nbsp;? <span class="whole">Écrivez-moi.</span></h2>
+    <p>Je dessine et je code des sites de portfolio pour des artistes, des architectes et des designers. Foliome est l’outil que j’ai construit pour que vous puissiez ensuite les modifier vous-même.</p>
+    <a class="mail" href="mailto:augustin_650@hotmail.fr">augustin_650@hotmail.fr</a>
+    <p>Le code de Foliome est public&nbsp;: <a href="https://github.com/augustin-bresset/foliome">voir le dépôt sur GitHub</a>.</p>
+    <footer class="foot">
+      <a class="brand" href="/">Foliome</a>
+      <span class="foot-end">
+        <a class="legal" href="/mentions-legales/">Mentions légales</a>
+        <button type="button" class="signin" id="signin-foot">Accéder à mon site</button>
+      </span>
+    </footer>
+  </section>
+</main>
+
+<div class="panel" id="panel" role="dialog" aria-labelledby="panel-title" hidden>
+  <header class="panel-head">
+    <div>
+      <h2 class="panel-title" id="panel-title"></h2>
+      <p class="panel-context" id="panel-context"></p>
+    </div>
+    <button type="button" class="close" id="panel-close" aria-label="Fermer"></button>
+  </header>
+  <form class="panel-form" id="panel-form">
+    <div class="panel-body" id="panel-body"></div>
+    <div class="panel-foot">
+      <button type="button" class="btn" id="panel-cancel">Annuler</button>
+      <button type="submit" class="btn is-primary" id="panel-submit">Enregistrer</button>
+    </div>
+  </form>
+</div>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<div class="ghost" id="ghost" aria-hidden="true" hidden>
+  <svg viewBox="0 0 24 24"><path d="M4 2.5v17.2l4.7-4.5 3 6.9 3.3-1.5-3-6.7 6.5-.4z" fill="#fff" stroke="#17171c" stroke-width="1.6" stroke-linejoin="round"/></svg>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id)
+  const root = document.documentElement
+  const panel = $('panel')
+  const body = $('panel-body')
+  const submit = $('panel-submit')
+
+  // Each paper comes with the ink it is printed in.
+  const PAPERS = [
+    ['Jaune', '#ffdf3d', '#1a1fa8'],
+    ['Rose', '#f6c3d5', '#1a1fa8'],
+    ['Outremer', '#1a1fa8', '#ffdf3d'],
+    ['Vert sapin', '#0e5a45', '#f6c3d5'],
+    ['Blanc', '#f3f3ef', '#141414'],
+  ]
+  const INKS = ['#1a1fa8', '#ffdf3d', '#000000', '#ffffff']
+
+  const START = { name: 'Votre nom', role: 'Votre discipline, votre ville', sheet: '#ffdf3d' }
+  const state = { ...START }
+  const stillness = matchMedia('(prefers-reduced-motion: reduce)')
+  let playing = false
+
+  const luminance = (hex) => {
+    const channel = (at) => {
+      const value = parseInt(hex.slice(at, at + 2), 16) / 255
+      return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+    }
+    return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5)
+  }
+  const contrast = (a, b) => {
+    const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+    return (light + 0.05) / (dark + 0.05)
+  }
+  const inkFor = (paper) =>
+    PAPERS.find(([, hex]) => hex === paper)?.[2] ?? INKS.reduce((best, ink) => (contrast(ink, paper) > contrast(best, paper) ? ink : best))
+
+  const showSheet = (hex) => {
+    root.style.setProperty('--sheet', hex)
+    root.style.setProperty('--print', inkFor(hex))
+    document.querySelector('meta[name=theme-color]').content = hex
+  }
+
+  /** A paper chosen in one click spreads over the page from where it was chosen. */
+  const spreadSheet = (hex, from) => {
+    if (!document.startViewTransition || stillness.matches) return showSheet(hex)
+    const box = from.getBoundingClientRect()
+    root.style.setProperty('--spread-x', `${box.left + box.width / 2}px`)
+    root.style.setProperty('--spread-y', `${box.top + box.height / 2}px`)
+    document.startViewTransition(() => showSheet(hex))
+  }
+
+  /** A sheet taller than the screen is read to its end before the next one comes over it. */
+  const sheets = [...document.querySelectorAll('.sheet-of-paper')]
+  const stack = () => {
+    for (const sheet of sheets) sheet.style.top = `${Math.min(0, innerHeight - sheet.offsetHeight)}px`
+  }
+  sheets.forEach((sheet) => new ResizeObserver(stack).observe(sheet))
+  addEventListener('resize', stack)
+
+  /** The name fills the sheet's width, whatever its length, without taking the whole screen. */
+  const line = $('name-line')
+  const text = $('name-text')
+  const fit = () => {
+    line.style.fontSize = '100px'
+    const width = text.getBoundingClientRect().width || 1
+    line.style.fontSize = `${Math.min((100 * line.clientWidth) / width, innerHeight * 0.42)}px`
+    if (!panel.hidden) place()
+  }
+  const showName = (value) => {
+    text.textContent = value.trim() || 'Votre nom'
+    fit()
+  }
+  new ResizeObserver(fit).observe(line)
+  document.fonts?.ready.then(fit)
+  fit()
+
+  // The panel
+
+  let open = null
+
+  const place = () => {
+    if (!open?.anchor || innerWidth <= 600) return
+    const box = open.anchor.getBoundingClientRect()
+    const { offsetWidth: width, offsetHeight: height } = panel
+    const fits = box.bottom + 12 + height < innerHeight
+    const top = fits ? box.bottom + 12 : Math.max(12, box.top - height - 12)
+    const left = Math.min(Math.max(12, box.left), innerWidth - width - 12)
+    panel.style.left = `${left}px`
+    panel.style.top = `${Math.max(12, top)}px`
+  }
+
+  const close = (restore = true) => {
+    if (!open) return
+    if (restore) open.restore?.()
+    open.anchor?.classList.remove('is-active')
+    if (!playing) open.trigger?.focus({ preventScroll: true })
+    panel.hidden = true
+    open = null
+    body.replaceChildren()
+  }
+
+  const show = (config) => {
+    close()
+    open = config
+    $('panel-title').textContent = config.title
+    $('panel-context').textContent = config.context
+    submit.textContent = config.action
+    submit.disabled = false
+    body.replaceChildren(...config.fields())
+    config.anchor?.classList.add('is-active')
+    document.body.classList.remove('is-waiting')
+    panel.hidden = false
+    place()
+    if (playing) return
+    panel.querySelector('input')?.select?.()
+    panel.querySelector('input')?.focus({ preventScroll: true })
+  }
+
+  const el = (tag, props = {}, ...children) => {
+    const node = Object.assign(document.createElement(tag), props)
+    node.append(...children)
+    return node
+  }
+
+  const field = (label, ...controls) => el('label', { className: 'field' }, el('span', { className: 'label', textContent: label }), ...controls)
+
+  const toast = (message) => {
+    const box = $('toast')
+    box.textContent = message
+    box.hidden = false
+    clearTimeout(toast.timer)
+    toast.timer = setTimeout(() => (box.hidden = true), 2600)
+  }
+
+  const textZone = (id, key, title, apply) => {
+    const zone = $(id)
+    zone.addEventListener('click', () => {
+      const before = state[key]
+      let input
+      show({
+        anchor: zone,
+        trigger: zone,
+        title,
+        context: 'Un essai : rien n’est conservé.',
+        action: 'Enregistrer',
+        fields: () => {
+          input = el('input', { className: 'input', value: before, maxLength: 60, autocomplete: 'off' })
+          input.addEventListener('input', () => apply(input.value))
+          return [field(title, input)]
+        },
+        restore: () => apply(before),
+        save: () => {
+          state[key] = input.value.trim() || before
+          apply(state[key])
+          return 'Enregistré'
+        },
+      })
+    })
+  }
+
+  textZone('name', 'name', 'Votre nom', showName)
+  textZone('role', 'role', 'Votre activité', (value) => {
+    $('role').textContent = value.trim() || 'Votre discipline, votre ville'
+  })
+
+  $('sheet').addEventListener('click', () => {
+    const before = state.sheet
+    let current = before
+    show({
+      anchor: $('sheet'),
+      trigger: $('sheet'),
+      title: 'Couleur du papier',
+      context: 'Un essai : rien n’est conservé.',
+      action: 'Enregistrer',
+      fields: () => {
+        const well = el('input', { className: 'color-well', type: 'color', value: before, ariaLabel: 'Choisir une couleur' })
+        const code = el('input', { className: 'input color-code', value: before, maxLength: 7, spellcheck: false, ariaLabel: 'Code de la couleur' })
+        const swatches = PAPERS.map(([name, hex]) => {
+          const swatch = el('button', { type: 'button', className: 'swatch', title: name, ariaLabel: name })
+          swatch.style.background = hex
+          swatch.addEventListener('click', () => set(hex, swatch))
+          return swatch
+        })
+        const mark = () => swatches.forEach((swatch, at) => swatch.setAttribute('aria-pressed', String(PAPERS[at][1] === current)))
+        const set = (hex, from) => {
+          current = hex
+          well.value = hex
+          if (code.value !== hex) code.value = hex
+          if (from) spreadSheet(hex, from)
+          else showSheet(hex)
+          mark()
+        }
+        well.addEventListener('input', () => set(well.value))
+        code.addEventListener('input', () => {
+          const value = code.value.trim().toLowerCase()
+          if (/^#[0-9a-f]{6}$/.test(value)) set(value)
+        })
+        mark()
+        return [el('div', { className: 'field' }, el('span', { className: 'label', textContent: 'Couleur' }), el('div', { className: 'color-row' }, well, code), el('div', { className: 'swatches' }, ...swatches))]
+      },
+      restore: () => showSheet(before),
+      save: () => {
+        state.sheet = current
+        return 'Enregistré'
+      },
+    })
+  })
+
+  // Signing in: the access code leads to the artist's own site.
+  const signIn = (trigger) => {
+    let input
+    let error
+    show({
+      anchor: trigger,
+      trigger,
+      title: 'Accéder à mon site',
+      context: 'Saisissez le code d’accès que vous avez reçu.',
+      action: 'Accéder à mon site',
+      fields: () => {
+        input = el('input', { className: 'input', autocomplete: 'off', autocapitalize: 'characters', spellcheck: false, placeholder: 'ABCD-EFGH', required: true })
+        error = el('p', { className: 'error', hidden: true, role: 'alert' })
+        return [field('Code d’accès', input), error]
+      },
+      save: async () => {
+        const fail = (message) => {
+          error.textContent = message
+          error.hidden = false
+          place()
+          return false
+        }
+        submit.disabled = true
+        try {
+          const res = await fetch('/entrer', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code: input.value }) })
+          if (res.ok) {
+            location.assign((await res.json()).url)
+            return false
+          }
+          if (res.status === 401) return fail('Ce code n’est pas le bon. Vérifiez-le et réessayez.')
+          if (res.status === 429) return fail('Trop d’essais. Patientez cinq minutes avant de réessayer.')
+          return fail('Votre site ne répond pas pour le moment. Réessayez dans quelques minutes.')
+        } catch {
+          return fail('Impossible de joindre Foliome. Vérifiez votre connexion et réessayez.')
+        } finally {
+          submit.disabled = false
+        }
+      },
+    })
+  }
+  $('signin').addEventListener('click', () => signIn($('signin')))
+  $('signin-foot').addEventListener('click', () => signIn($('signin-foot')))
+
+  $('panel-form').addEventListener('submit', async (event) => {
+    event.preventDefault()
+    const message = await open?.save()
+    if (!message) return
+    close(false)
+    toast(message)
+  })
+  $('panel-close').addEventListener('click', () => close())
+  $('panel-cancel').addEventListener('click', () => close())
+  addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') close()
+  })
+  addEventListener('resize', place)
+  addEventListener('scroll', place, { passive: true })
+
+  // The page shows what it does by itself, until the visitor does anything at all.
+
+  const STORIES = [
+    { name: 'Atelier Morane', role: 'Architecture, Nantes', paper: 'Rose' },
+    { name: 'Maison Vesper', role: 'Design graphique, Lyon', paper: 'Outremer' },
+  ]
+  const ghost = $('ghost')
+  const STOPPED = Symbol('stopped')
+  let cancel = () => {}
+
+  const sleep = (ms) =>
+    new Promise((done, fail) => {
+      const timer = setTimeout(done, ms)
+      cancel = () => {
+        clearTimeout(timer)
+        fail(STOPPED)
+      }
+    })
+
+  const reach = async (target) => {
+    const box = target.getBoundingClientRect()
+    ghost.style.setProperty('--ghost-x', `${box.left + Math.min(box.width / 2, 140)}px`)
+    ghost.style.setProperty('--ghost-y', `${box.top + box.height * 0.6}px`)
+    await sleep(760)
+    target.classList.add('is-reached')
+    await sleep(240)
+  }
+
+  const press = async (target) => {
+    ghost.classList.add('is-pressing')
+    await sleep(120)
+    ghost.classList.remove('is-pressing')
+    target.classList.remove('is-reached')
+    target.click()
+    await sleep(380)
+  }
+
+  const type = async (value) => {
+    const input = panel.querySelector('input')
+    const change = (next) => {
+      input.value = next
+      input.dispatchEvent(new Event('input'))
+    }
+    while (input.value) {
+      change(input.value.slice(0, -1))
+      await sleep(24)
+    }
+    for (const letter of value) {
+      change(input.value + letter)
+      await sleep(55 + Math.random() * 55)
+    }
+    await sleep(320)
+  }
+
+  const edit = async (zone, value) => {
+    await reach(zone)
+    await press(zone)
+    await type(value)
+    await reach(submit)
+    await press(submit)
+  }
+
+  const backToStart = () => {
+    Object.assign(state, START)
+    showName(START.name)
+    $('role').textContent = START.role
+    ghost.hidden = true
+    document.querySelectorAll('.is-reached').forEach((zone) => zone.classList.remove('is-reached'))
+    document.body.classList.add('is-waiting')
+  }
+
+  const stop = () => {
+    if (!playing) return
+    cancel()
+    close()
+    playing = false
+    showSheet(START.sheet)
+    backToStart()
+  }
+
+  const play = async () => {
+    playing = true
+    try {
+      await sleep(1500)
+      document.body.classList.remove('is-waiting')
+      ghost.hidden = false
+      await sleep(60)
+      for (const story of STORIES) {
+        await edit($('name'), story.name)
+        await edit($('role'), story.role)
+        await reach($('sheet'))
+        await press($('sheet'))
+        const swatch = panel.querySelector(`.swatch[title="${story.paper}"]`)
+        await reach(swatch)
+        await press(swatch)
+        await sleep(950)
+        await reach(submit)
+        await press(submit)
+        await sleep(1900)
+      }
+      playing = false
+      spreadSheet(START.sheet, $('name'))
+      backToStart()
+    } catch (reason) {
+      if (reason !== STOPPED) throw reason
+    }
+  }
+
+  for (const event of ['pointerdown', 'keydown', 'wheel', 'touchstart']) {
+    addEventListener(event, stop, { capture: true, passive: true })
+  }
+  if (!stillness.matches) play()
+})()
+</script>
+</body>
+</html>
