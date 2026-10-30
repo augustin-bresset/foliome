@@ -18,6 +18,7 @@ import {
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { api, explain } from './api.ts'
 import { FieldList, type FieldContext, pageLocale } from './fields.tsx'
+import { t } from './i18n.ts'
 import { useFollow } from './zones.ts'
 
 export type Open =
@@ -237,14 +238,12 @@ export function Panel({ schema, content, open, nudge, onDirty, onClose, onOpen, 
 
   if (!form) {
     return (
-      <div ref={ref} class={anchor ? 'panel' : 'panel is-centered'} role="dialog" aria-label="Zone inconnue">
+      <div ref={ref} class={anchor ? 'panel' : 'panel is-centered'} role="dialog" aria-label={t.unknownZone}>
         <header class="panel-head">
-          <h2 class="panel-title">Zone inconnue</h2>
-          <button type="button" class="close" aria-label="Fermer" onClick={onClose} />
+          <h2 class="panel-title">{t.unknownZone}</h2>
+          <button type="button" class="close" aria-label={t.close} onClick={onClose} />
         </header>
-        <p class="note">
-          Cette zone n’est pas décrite dans la configuration du site{open.kind === 'path' ? ` (${open.path})` : ''}. Prévenez votre développeur.
-        </p>
+        <p class="note">{t.unknownZoneHelp(open.kind === 'path' ? open.path : '')}</p>
       </div>
     )
   }
@@ -298,7 +297,7 @@ export function Panel({ schema, content, open, nudge, onDirty, onClose, onOpen, 
         const existing = (content[open.list] as Item[] | undefined) ?? []
         const item = withSlugs(list, [...existing, { ...form.value, ...draft } as Item]).at(-1)!
         await api.ops([{ op: 'insert', path: open.list, value: item, index: 0 }])
-        onSaved('Créé', inLocale(schema, itemUrl(list, item)) ?? undefined)
+        onSaved(t.created, inLocale(schema, itemUrl(list, item)) ?? undefined)
         return
       }
       await api.ops(
@@ -309,19 +308,19 @@ export function Panel({ schema, content, open, nudge, onDirty, onClose, onOpen, 
         }),
       )
       kept.current = true
-      onSaved('Enregistré', undefined, changed.every((name) => shown.current.has(name)))
+      onSaved(t.saved, undefined, changed.every((name) => shown.current.has(name)))
     })
 
   const remove = () =>
     run(async () => {
       await api.ops([{ op: 'remove', path: form.prefix }])
-      onSaved('Supprimé', form.isPage && form.page && onPage(form.page) ? (inLocale(schema, '/') ?? '/') : undefined)
+      onSaved(t.removed, form.isPage && form.page && onPage(form.page) ? (inLocale(schema, '/') ?? '/') : undefined)
     })
 
   const move = (by: number) =>
     run(async () => {
       await api.ops([{ op: 'move', path: form.prefix, index: form.item!.index + by }])
-      onSaved('Ordre modifié')
+      onSaved(t.reordered)
     })
 
   const single = Object.keys(form.fields).length === 1 && !!form.whole && !step
@@ -339,7 +338,7 @@ export function Panel({ schema, content, open, nudge, onDirty, onClose, onOpen, 
               <p class="panel-context">{here ? hereTitle : form.context}</p>
             )}
           </div>
-          <button type="button" class="close" aria-label="Fermer" onClick={onClose} />
+          <button type="button" class="close" aria-label={t.close} onClick={onClose} />
         </header>
 
         <form
@@ -355,13 +354,13 @@ export function Panel({ schema, content, open, nudge, onDirty, onClose, onOpen, 
                 <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
                   <path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
-                Retour
+                {t.back}
               </button>
             )}
 
             {creating && createTypes.length > 1 && (
               <div class="field">
-                <span class="label">Type</span>
+                <span class="label">{t.type}</span>
                 <div class="choices">
                   {createTypes.map(([key, type]) => (
                     <button
@@ -390,17 +389,17 @@ export function Panel({ schema, content, open, nudge, onDirty, onClose, onOpen, 
                 {/* From one item, the way to its siblings: adding, reordering. */}
                 {form.item && anchor && !step && (
                   <button type="button" class="link" disabled={dirty} onClick={() => onOpen({ kind: 'path', path: form.item!.listPath, anchor })}>
-                    Toute la liste
+                    {t.wholeList}
                   </button>
                 )}
                 {form.whole && anchor && !step && (
                   <button type="button" class="link" disabled={dirty} onClick={() => onOpen({ kind: 'path', path: form.whole!, anchor })}>
-                    Voir tous les champs
+                    {t.allFields}
                   </button>
                 )}
                 {pageLink && (
                   <a class="link" href={pageLink}>
-                    Ouvrir la page
+                    {t.openPage}
                   </a>
                 )}
               </p>
@@ -408,17 +407,15 @@ export function Panel({ schema, content, open, nudge, onDirty, onClose, onOpen, 
 
             {form.item && !step && (
               <div class="item-actions">
-                <span class="item-position">
-                  Position {form.item.index + 1} sur {form.item.count}
-                </span>
+                <span class="item-position">{t.position(form.item.index + 1, form.item.count)}</span>
                 <button type="button" class="link" disabled={saving || dirty || form.item.index === 0} onClick={() => move(-1)}>
-                  Monter
+                  {t.moveUp}
                 </button>
                 <button type="button" class="link" disabled={saving || dirty || form.item.index === form.item.count - 1} onClick={() => move(1)}>
-                  Descendre
+                  {t.moveDown}
                 </button>
                 <button type="button" class="link is-danger" disabled={saving} onClick={() => setConfirming(true)}>
-                  Supprimer
+                  {t.remove}
                 </button>
               </div>
             )}
@@ -432,22 +429,22 @@ export function Panel({ schema, content, open, nudge, onDirty, onClose, onOpen, 
 
           {confirming ? (
             <footer class="panel-foot is-confirm">
-              <p class="confirm-text">Supprimer « {form.context || form.title} » du site ? Le bouton Annuler de la barre permet de revenir en arrière.</p>
+              <p class="confirm-text">{t.confirmRemove(form.context || form.title)}</p>
               <button type="button" class="btn" onClick={() => setConfirming(false)}>
-                Garder
+                {t.keep}
               </button>
               <button type="button" class="btn is-danger" disabled={saving} onClick={remove}>
-                Supprimer
+                {t.remove}
               </button>
             </footer>
           ) : (
             <footer class="panel-foot">
-              {nudged && dirty && <p class="nudge">Enregistrez ou annulez d’abord.</p>}
+              {nudged && dirty && <p class="nudge">{t.saveOrCancel}</p>}
               <button type="button" class="btn" onClick={onClose}>
-                Annuler
+                {t.cancel}
               </button>
               <button type="submit" class="btn is-primary" disabled={!canSave}>
-                {uploading > 0 ? 'Envoi des fichiers…' : creating ? 'Créer' : 'Enregistrer'}
+                {uploading > 0 ? t.sendingFiles : creating ? t.create : t.save}
               </button>
             </footer>
           )}

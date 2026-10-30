@@ -1,5 +1,7 @@
 import { type Asset, type Doc, extOf, type FileKind, kindOf, mimeOf, type Op, pickerAccept, type Schema } from '@foliome/core'
 
+import { t } from './i18n.ts'
+
 const BASE = '/_foliome'
 
 export class ApiError extends Error {
@@ -52,10 +54,10 @@ export const api = {
 /** What to tell the artist when a request fails. */
 export function explain(err: unknown): string {
   const code = err instanceof ApiError ? err.code : ''
-  if (code === 'network') return 'La connexion avec l’ordinateur qui héberge le site est coupée. Vérifiez votre connexion puis réessayez.'
-  if (code === 'unauthorized') return 'Votre accès a expiré. Rechargez la page et saisissez à nouveau le code.'
-  if (code === 'too_large') return 'Ce fichier dépasse la taille maximale de 2 Go.'
-  return 'L’enregistrement a échoué. Réessayez ; si cela continue, prévenez votre développeur.'
+  if (code === 'network') return t.disconnected
+  if (code === 'unauthorized') return t.expired
+  if (code === 'too_large') return t.tooLarge
+  return t.saveFailed
 }
 
 type Measures = { width?: string; height?: string; duration?: string }

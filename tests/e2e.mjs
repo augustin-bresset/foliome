@@ -92,7 +92,7 @@ const BASE = lan ? `http://${lan}:${PORT}` : local
 const content = () => JSON.parse(readFileSync(path.join(DEMO, 'content', 'content.json'), 'utf8'))
 const project = (id) => content().projects.find((p) => p.id === id)
 const browser = await chromium.launch({ executablePath: chrome, args: ['--no-sandbox'] })
-const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage()
+const page = await (await browser.newContext({ locale: 'fr-FR', viewport: { width: 1440, height: 900 } })).newPage()
 const problems = []
 page.on('console', (m) => m.type() === 'error' && problems.push(`console: ${m.text()}`))
 page.on('pageerror', (e) => problems.push(`pageerror: ${e}`))
@@ -514,6 +514,18 @@ try {
   await ed('.panel[role=alertdialog]').waitFor({ timeout: 60000 })
   check('a failed deploy shows the command’s own message', (await text(ed('.log')))?.includes('upload refused: disk full') && (await text(ed('.panel-context')))?.includes('bien enregistrées'))
   check('and no success is announced', (await ed('.toast').count()) === 0)
+} catch (err) {
+  results.push(`CRASH  ${String(err).split('\n')[0]}`)
+}
+
+/* The editor speaks the artist's language, not the page's */
+try {
+  const english = await (await browser.newContext({ locale: 'en-GB', viewport: { width: 1440, height: 900 } })).newPage()
+  await english.goto(`${local}/?edit`)
+  await english.locator('foliome-editor .bar').waitFor({ timeout: 60000 })
+  const words = await english.locator('foliome-editor .bar').textContent()
+  check('a browser set to English gets the editor in English', ['Edit', 'Browse', 'Undo', 'Publish', 'Quit'].every((word) => words?.includes(word)) && !words?.includes('Mettre en ligne'), words ?? '')
+  await english.close()
 } catch (err) {
   results.push(`CRASH  ${String(err).split('\n')[0]}`)
 }

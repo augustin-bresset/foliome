@@ -1,6 +1,7 @@
 import { type Doc, resolvePath, type Schema } from '@foliome/core'
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { api, explain, type SiteConfig } from './api.ts'
+import { t } from './i18n.ts'
 import { type Open, Panel } from './Panel.tsx'
 import { useFollow, zoneAt } from './zones.ts'
 
@@ -46,7 +47,7 @@ function Outline(props: { el: HTMLElement; active?: boolean; label?: string; lin
           </button>
           {props.link && (
             <button type="button" class="tag-btn is-quiet" onClick={props.onFollow}>
-              Ouvrir la page
+              {t.openPage}
             </button>
           )}
         </div>
@@ -190,9 +191,9 @@ export function App({ host, config, initial: loaded, onQuit }: Props) {
         )
         const first = location.pathname.split('/').find(Boolean)
         const home = first && schema.locales?.slice(1).includes(first) ? `/${first}` : '/'
-        return refresh('Dernière modification annulée', gone ? home : undefined)
+        return refresh(t.undone, gone ? home : undefined)
       }
-      setToast('Rien à annuler')
+      setToast(t.nothingToUndo)
     } catch (err) {
       setToast(explain(err))
     }
@@ -206,7 +207,7 @@ export function App({ host, config, initial: loaded, onQuit }: Props) {
     setFailure(null)
     try {
       const result = await api.publish()
-      if (result.ok) setToast('Site mis en ligne')
+      if (result.ok) setToast(t.published)
       else setFailure(result.log)
     } catch (err) {
       setFailure(explain(err))
@@ -255,18 +256,18 @@ export function App({ host, config, initial: loaded, onQuit }: Props) {
       {failure && (
         <>
           <div class="scrim" />
-          <div class="panel is-centered" role="alertdialog" aria-label="La mise en ligne a échoué">
+          <div class="panel is-centered" role="alertdialog" aria-label={t.publishFailed}>
             <header class="panel-head">
               <div>
-                <h2 class="panel-title">La mise en ligne a échoué</h2>
-                <p class="panel-context">Vos modifications sont bien enregistrées. Transmettez ce message à votre développeur.</p>
+                <h2 class="panel-title">{t.publishFailed}</h2>
+                <p class="panel-context">{t.publishFailedHelp}</p>
               </div>
-              <button type="button" class="close" aria-label="Fermer" onClick={() => setFailure(null)} />
+              <button type="button" class="close" aria-label={t.close} onClick={() => setFailure(null)} />
             </header>
             <pre class="log">{failure}</pre>
             <footer class="panel-foot">
               <button type="button" class="btn" onClick={() => setFailure(null)}>
-                Fermer
+                {t.close}
               </button>
             </footer>
           </div>
@@ -275,7 +276,7 @@ export function App({ host, config, initial: loaded, onQuit }: Props) {
 
       {/* Everything editable, including what cannot be clicked on the page: content drawn in WebGL, hidden states, text for search engines. */}
       {menu && (
-        <div class="menu" role="menu" aria-label="Contenu du site">
+        <div class="menu" role="menu" aria-label={t.siteContent}>
           {entries.map(([name, def]) => (
             <button type="button" class="menu-item" role="menuitem" onClick={() => go({ kind: 'path', path: name, anchor: null })}>
               {def.label}
@@ -284,17 +285,17 @@ export function App({ host, config, initial: loaded, onQuit }: Props) {
         </div>
       )}
 
-      <div class="bar" role="toolbar" aria-label={`Édition de ${config.name}`}>
+      <div class="bar" role="toolbar" aria-label={t.editing(config.name)}>
         <div class="seg">
           <button type="button" class="seg-btn" aria-pressed={mode === 'edit'} onClick={() => choose('edit')}>
-            Modifier
+            {t.edit}
           </button>
           <button type="button" class="seg-btn" aria-pressed={mode === 'browse'} onClick={() => choose('browse')}>
-            Parcourir
+            {t.browse}
           </button>
         </div>
         <button type="button" class="bar-btn" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)}>
-          Contenu
+          {t.content}
         </button>
         {entries.map(
           ([name, def]) =>
@@ -308,19 +309,19 @@ export function App({ host, config, initial: loaded, onQuit }: Props) {
               </button>
             ),
         )}
-        <button type="button" class="bar-btn" disabled={!!busy || !initial.canUndo} title="Annuler la dernière modification enregistrée" onClick={undo}>
+        <button type="button" class="bar-btn" disabled={!!busy || !initial.canUndo} title={t.undoHint} onClick={undo}>
           <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
             <path d="M3 6.5h6.2a3.8 3.8 0 0 1 0 7.6H6M3 6.5l3-3M3 6.5l3 3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
-          Annuler
+          {t.undo}
         </button>
         {config.publish && (
           <button type="button" class="bar-btn is-strong" disabled={!!busy} onClick={publish}>
-            {busy === 'publish' ? 'Mise en ligne…' : 'Mettre en ligne'}
+            {busy === 'publish' ? t.publishing : t.publish}
           </button>
         )}
         <button type="button" class="bar-btn" onClick={onQuit}>
-          Quitter
+          {t.quit}
         </button>
       </div>
 

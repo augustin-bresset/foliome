@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { describeKinds, kindOf, mimeOf, pickerAccept, safeFileName } from '../src/index.ts'
+import { describeKinds, formatSize, kindOf, mimeOf, pickerAccept, safeFileName } from '../src/index.ts'
 
 test('files are classified by what a browser can do with them', () => {
   const kind = (name: string, reported = '') => kindOf(mimeOf(name, reported), name)
@@ -19,6 +19,9 @@ test('files are classified by what a browser can do with them', () => {
   assert.equal(pickerAccept(['image', 'pdf'])?.includes('image/heic'), false)
   assert.equal(pickerAccept(undefined), undefined)
   assert.equal(describeKinds(['image', 'video', 'pdf']).endsWith('une vidéo ou un PDF'), true)
+  assert.equal(describeKinds(['video', 'pdf'], 'en'), 'a video or a PDF')
+  assert.equal(formatSize(2_500_000), '2,5 Mo')
+  assert.equal(formatSize(2_500_000, 'en'), '2.5 MB')
   assert.equal(safeFileName('Façade nord (v2).JPG'), 'Facade-nord-v2.jpg')
   assert.equal(safeFileName('../../etc/passwd'), 'etc-passwd')
   assert.equal(safeFileName('...'), 'fichier')

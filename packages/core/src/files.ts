@@ -81,13 +81,25 @@ const PICKER: Record<FileKind, string> = {
   file: '',
 }
 
-const KIND_NAMES: Record<FileKind, string> = {
-  image: 'une image (JPEG, PNG, WebP, AVIF, GIF ou SVG)',
-  video: 'une vidéo',
-  audio: 'un son',
-  pdf: 'un PDF',
-  model: 'un modèle 3D',
-  file: 'un fichier',
+type Language = 'fr' | 'en'
+
+const KIND_NAMES: Record<Language, Record<FileKind, string>> = {
+  fr: {
+    image: 'une image (JPEG, PNG, WebP, AVIF, GIF ou SVG)',
+    video: 'une vidéo',
+    audio: 'un son',
+    pdf: 'un PDF',
+    model: 'un modèle 3D',
+    file: 'un fichier',
+  },
+  en: {
+    image: 'an image (JPEG, PNG, WebP, AVIF, GIF or SVG)',
+    video: 'a video',
+    audio: 'a sound',
+    pdf: 'a PDF',
+    model: 'a 3D model',
+    file: 'a file',
+  },
 }
 
 /** Value for a file input's `accept`, so the picker only offers what the field can take. */
@@ -97,9 +109,10 @@ export function pickerAccept(kinds: FileKind[] | undefined): string | undefined 
 }
 
 /** "une image (…) ou une vidéo", for telling the artist what a field expects. */
-export function describeKinds(kinds: FileKind[]): string {
-  const names = kinds.map((kind) => KIND_NAMES[kind])
-  return names.length > 1 ? `${names.slice(0, -1).join(', ')} ou ${names.at(-1)}` : (names[0] ?? '')
+export function describeKinds(kinds: FileKind[], language: Language = 'fr'): string {
+  const names = kinds.map((kind) => KIND_NAMES[language][kind])
+  const or = language === 'fr' ? 'ou' : 'or'
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} ${or} ${names.at(-1)}` : (names[0] ?? '')
 }
 
 /** Keeps a file name readable while making it safe as a URL segment and on any file system. */
@@ -114,9 +127,10 @@ export function safeFileName(name: string): string {
   return (stem || 'fichier') + (ext ? `.${ext}` : '')
 }
 
-export function formatSize(bytes: number): string {
-  if (bytes < 1000) return `${bytes} o`
-  if (bytes < 1e6) return `${Math.round(bytes / 1e3)} Ko`
-  if (bytes < 1e9) return `${(bytes / 1e6).toFixed(bytes < 1e7 ? 1 : 0).replace('.', ',')} Mo`
-  return `${(bytes / 1e9).toFixed(1).replace('.', ',')} Go`
+export function formatSize(bytes: number, language: Language = 'fr'): string {
+  const [byte, kilo, mega, giga, point] = language === 'fr' ? ['o', 'Ko', 'Mo', 'Go', ','] : ['B', 'KB', 'MB', 'GB', '.']
+  if (bytes < 1000) return `${bytes} ${byte}`
+  if (bytes < 1e6) return `${Math.round(bytes / 1e3)} ${kilo}`
+  if (bytes < 1e9) return `${(bytes / 1e6).toFixed(bytes < 1e7 ? 1 : 0).replace('.', point!)} ${mega}`
+  return `${(bytes / 1e9).toFixed(1).replace('.', point!)} ${giga}`
 }
