@@ -1,3 +1,4 @@
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
@@ -22,6 +23,12 @@ export interface FoliomeOptions {
   publish?: string
   /** Extra host names the editing API answers to, besides localhost, IP addresses and *.local names. */
   allowedHosts?: string[]
+  /**
+   * The address this server is reached at from outside, when a tunnel opens it to an artist who is elsewhere:
+   * "https://atelier.example.org". Once it is set the access code is asked of everyone, on this machine too, since
+   * a tunnel's requests cannot be told from the developer's own.
+   */
+  address?: string
 }
 
 // Runs before anything else on the page. The editor only loads for someone who
@@ -30,7 +37,19 @@ const LOADER = `(function(){try{var q=new URLSearchParams(location.search);if(q.
 
 export default function foliome(options: FoliomeOptions): AstroIntegration {
   const { name, content, locales, publish, allowedHosts = [] } = options
+  let outside: URL | undefined
+  if (options.address) {
+    try {
+      outside = new URL(options.address)
+    } catch {
+      // Judged below.
+    }
+    if (!outside || !/^https?:$/.test(outside.protocol)) {
+      throw new Error(`foliome : « address » doit être une adresse complète, par exemple https://atelier.exemple.fr (reçu : ${options.address})`)
+    }
+  }
   let root = process.cwd()
+  let local: Awaited<ReturnType<typeof createLocal>> | undefined
   let code = ''
   let missing: string[] = []
 
@@ -40,8 +59,31 @@ export default function foliome(options: FoliomeOptions): AstroIntegration {
       'astro:config:setup': ({ command, injectScript, updateConfig }) => {
         if (command !== 'dev') return
         injectScript('head-inline', LOADER)
-        // The artist edits on this server: Astro's own developer toolbar has no place on their screen.
-        updateConfig({ devToolbar: { enabled: false } })
+        updateConfig({
+          // The artist edits on this server: Astro's own developer toolbar has no place on their screen.
+          devToolbar: { enabled: false },
+          vite: {
+            plugins: [
+              {
+                name: 'foliome:door',
+                enforce: 'post',
+                // Once every middleware is in place Astro puts checks of its own ahead of them all, and some answer
+                // for files of the project. The door goes in front of those too.
+                configureServer: (server) => () => {
+                  server.middlewares.stack.unshift({
+                    route: '',
+                    handle: (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => {
+                      if (local) local.gate(req, res, next)
+                      else res.writeHead(503).end()
+                    },
+                  })
+                },
+              },
+            ],
+          },
+        })
+        // Vite turns away requests made under a name it was not told about.
+        if (outside) updateConfig({ server: { allowedHosts: [outside.hostname] } })
       },
 
       'astro:config:done': ({ config }) => {
@@ -55,11 +97,12 @@ export default function foliome(options: FoliomeOptions): AstroIntegration {
       'astro:server:setup': async ({ server }) => {
         process.env.FOLIOME_EDITABLE = '1'
         const editorPackage = createRequire(import.meta.url).resolve('@foliome/editor/package.json')
-        const local = await createLocal({
+        local = await createLocal({
           root,
           name,
           schema: { content, locales },
           allowedHosts,
+          address: outside,
           publish,
           editorFile: path.join(path.dirname(editorPackage), 'dist', 'editor.js'),
           // Pages are rendered from the content file, which Vite does not know
@@ -78,7 +121,12 @@ export default function foliome(options: FoliomeOptions): AstroIntegration {
           !local.tools.heic && 'heic-convert (les photos HEIC sont refusées)',
           !local.tools.ffmpeg && 'ffmpeg (les vidéos sont gardées telles qu’envoyées)',
         ].filter((tool): tool is string => !!tool)
-        server.middlewares.use(local.middleware)
+        const { allows, middleware } = local
+        server.middlewares.use(middleware)
+        // Live reload travels on a socket of its own, which no middleware sees: it is held to the same rule.
+        server.httpServer?.prependListener('upgrade', (req, socket) => {
+          if (!allows(req)) socket.destroy()
+        })
       },
 
       'astro:server:start': ({ address, logger }) => {
@@ -91,10 +139,16 @@ export default function foliome(options: FoliomeOptions): AstroIntegration {
           .filter((i) => i.family === 'IPv4' && !i.internal)
           .map((i) => i.address)
 
-        logger.info(`Édition sur cet ordinateur : http://localhost:${port}/?edit`)
-        if (onNetwork && lan.length > 0) {
-          for (const ip of lan) logger.info(`Lien pour l'artiste (même réseau) : http://${ip}:${port}/?edit=${formatCode(code)}`)
+        const key = `?edit=${formatCode(code)}`
+        if (outside) {
+          logger.info(`Lien pour l'artiste (à distance) : ${new URL(`/${key}`, outside)}`)
+          logger.info(`Le code est demandé ici aussi : http://localhost:${port}/${key}`)
         } else {
+          logger.info(`Édition sur cet ordinateur : http://localhost:${port}/?edit`)
+        }
+        if (onNetwork && lan.length > 0) {
+          for (const ip of lan) logger.info(`Lien pour l'artiste (même réseau) : http://${ip}:${port}/${key}`)
+        } else if (!outside) {
           logger.info(`Pour ouvrir l'édition à l'artiste sur le réseau local, relancez avec --host`)
         }
         for (const tool of missing) logger.warn(`Outil absent : ${tool}`)

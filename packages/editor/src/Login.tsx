@@ -1,7 +1,8 @@
 import { useState } from 'preact/hooks'
 import { api, ApiError } from './api.ts'
 
-export function Login({ onSuccess, onClose }: { onSuccess: () => void; onClose: () => void }) {
+/** Without `onClose` there is nothing to go back to: the prompt stays until the code is given. */
+export function Login({ onSuccess, onClose }: { onSuccess: () => void; onClose?: () => void }) {
   const [code, setCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -20,7 +21,7 @@ export function Login({ onSuccess, onClose }: { onSuccess: () => void; onClose: 
           ? 'Ce code n’est pas le bon. Vérifiez-le et réessayez.'
           : reason === 'too_many'
             ? 'Trop d’essais. Patientez cinq minutes avant de réessayer.'
-            : 'Impossible de joindre le site. Vérifiez que vous êtes sur le même Wi-Fi que votre développeur.',
+            : 'Impossible de joindre le site. Vérifiez votre connexion ; si elle fonctionne, l’ordinateur de votre développeur est peut-être éteint.',
       )
       setBusy(false)
     }
@@ -35,7 +36,7 @@ export function Login({ onSuccess, onClose }: { onSuccess: () => void; onClose: 
             <h2 class="panel-title">Modifier ce site</h2>
             <p class="panel-context">Saisissez le code d’accès donné par votre développeur.</p>
           </div>
-          <button type="button" class="close" aria-label="Fermer" onClick={onClose} />
+          {onClose && <button type="button" class="close" aria-label="Fermer" onClick={onClose} />}
         </header>
         <form
           class="panel-form"
