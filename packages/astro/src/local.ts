@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { createHash, randomBytes, randomInt, timingSafeEqual } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { isIP } from 'node:net'
 import path from 'node:path'
@@ -44,6 +44,10 @@ interface State {
   code: string
   /** sha256(session token) → expiry timestamp */
   sessions: Record<string, number>
+  /** Wrong codes, by visitor and for everybody. Kept here so that a restart does not wipe the count. */
+  failures: Record<string, { count: number; resetAt: number }>
+  /** Visitors who have signed in before: a flood of wrong codes from elsewhere does not shut them out. */
+  known: string[]
 }
 
 type Env = { Bindings: HttpBindings }
@@ -58,6 +62,7 @@ const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1'])
 const TRIES = 8
 const TRIES_IN_ALL = 200
 const EVERYBODY = '*'
+const KNOWN_VISITORS = 50
 
 // No I, L, O, 0 or 1: the code is read aloud and typed by hand.
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
@@ -73,20 +78,28 @@ const isApi = (url: string) => {
 const escapeHtml = (text: string) => text.replace(/[&<>"]/g, (char) => `&#${char.charCodeAt(0)};`)
 const hostName = (host: string | undefined) => (host ?? '').replace(/:\d+$/, '').replace(/^\[|\]$/g, '').toLowerCase()
 
+/** Whole or not at all: an unreadable file would mean a new code, and the artist's link dead. */
+async function storeState(file: string, state: State) {
+  const tmp = `${file}.tmp`
+  await writeFile(tmp, JSON.stringify(state, null, 2))
+  await rename(tmp, file)
+}
+
 async function loadState(file: string): Promise<State> {
-  let state: State = { code: newCode(), sessions: {} }
+  let state: State = { code: newCode(), sessions: {}, failures: {}, known: [] }
   try {
     const saved = JSON.parse(await readFile(file, 'utf8')) as Partial<State>
     if (typeof saved.code === 'string' && saved.code.length === 8) {
-      state = { code: saved.code, sessions: saved.sessions ?? {} }
+      state = { code: saved.code, sessions: saved.sessions ?? {}, failures: saved.failures ?? {}, known: saved.known ?? [] }
     }
   } catch {
     // First run, or an unreadable file: start fresh.
   }
   const now = Date.now()
   for (const [hash, expires] of Object.entries(state.sessions)) if (expires < now) delete state.sessions[hash]
+  for (const [who, record] of Object.entries(state.failures)) if (record.resetAt <= now) delete state.failures[who]
   await mkdir(path.dirname(file), { recursive: true })
-  await writeFile(file, JSON.stringify(state, null, 2))
+  await storeState(file, state)
   return state
 }
 
@@ -95,7 +108,11 @@ export async function createLocal(options: LocalOptions) {
   const stateFile = path.join(dir, 'local.json')
   const mediaDir = path.join(options.root, 'public', 'media')
   const state = await loadState(stateFile)
-  const save = () => writeFile(stateFile, JSON.stringify(state, null, 2))
+  let saving: Promise<unknown> = Promise.resolve()
+  const save = () => {
+    saving = saving.catch(() => {}).then(() => storeState(stateFile, state))
+    return saving
+  }
 
   const tools = await detectTools()
   const files = fsStorage({
@@ -156,20 +173,20 @@ export async function createLocal(options: LocalOptions) {
 
   // Wrong codes are counted per visitor, so that one who guesses does not shut the door on the artist, and for
   // everybody together, since a visitor behind a tunnel is only who the tunnel says they are.
-  const failures = new Map<string, { count: number; resetAt: number }>()
   const spent = (who: string, most: number) => {
-    const record = failures.get(who)
+    const record = state.failures[who]
     return !!record && record.resetAt > Date.now() && record.count >= most
   }
   const fail = (who: string) => {
     const now = Date.now()
-    for (const [key, record] of failures) if (record.resetAt <= now) failures.delete(key)
-    const record = failures.get(who)
-    failures.set(who, record ? { ...record, count: record.count + 1 } : { count: 1, resetAt: now + 5 * 60_000 })
+    for (const [key, record] of Object.entries(state.failures)) if (record.resetAt <= now) delete state.failures[key]
+    const record = state.failures[who]
+    state.failures[who] = record ? { ...record, count: record.count + 1 } : { count: 1, resetAt: now + 5 * 60_000 }
   }
+  /** Hashed: no visitor's address is kept on disk. */
   const visitor = (req: IncomingMessage) => {
     const through = options.address && String(req.headers['x-forwarded-for'] ?? '').split(',')[0]?.trim()
-    return through || (req.socket.remoteAddress ?? 'unknown')
+    return sha256(through || (req.socket.remoteAddress ?? 'unknown'))
   }
 
   // The folder that holds the access code. Vite hands any file of the project to whoever asks for it by name.
@@ -219,19 +236,23 @@ export async function createLocal(options: LocalOptions) {
   app.get('/session', (c) => c.json({ editor: isEditor(c.env.incoming) }))
 
   app.post('/login', async (c) => {
-    const who = visitor(c.env.incoming)
-    if (spent(who, TRIES) || spent(EVERYBODY, TRIES_IN_ALL)) return c.json({ error: 'too_many' }, 429)
-
+    // The code is read first. From the count to the verdict nothing waits: requests held open and released together
+    // are judged one at a time, each seeing the count the last one left.
     const body = (await c.req.json().catch(() => null)) as { code?: unknown } | null
+    const who = visitor(c.env.incoming)
+    if (spent(who, TRIES) || (spent(EVERYBODY, TRIES_IN_ALL) && !state.known.includes(who))) return c.json({ error: 'too_many' }, 429)
+
     const given = Buffer.from(normalizeCode(body?.code))
     const expected = Buffer.from(state.code)
     if (given.length !== expected.length || !timingSafeEqual(given, expected)) {
       fail(who)
       fail(EVERYBODY)
+      await save()
       return c.json({ error: 'bad_code' }, 401)
     }
 
-    failures.delete(who)
+    delete state.failures[who]
+    state.known = [...state.known.filter((visitor) => visitor !== who), who].slice(-KNOWN_VISITORS)
     const token = randomBytes(32).toString('base64url')
     state.sessions[sha256(token)] = Date.now() + SESSION_DAYS * 86_400_000
     await save()

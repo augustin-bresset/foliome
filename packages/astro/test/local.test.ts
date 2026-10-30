@@ -13,7 +13,7 @@ after(() => Promise.all(closing.map((close) => close())))
 
 /** The editing server in front of a stand-in for the site, the way it sits in front of Astro's dev server. */
 async function serve(options: Partial<LocalOptions> = {}) {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'foliome-local-'))
+  const root = options.root ?? (await mkdtemp(path.join(os.tmpdir(), 'foliome-local-')))
   await writeFile(path.join(root, 'editor.js'), '/* editor */')
   const local = await createLocal({
     root,
@@ -156,7 +156,50 @@ test('wrong codes run out: for one visitor first, then for everybody', async () 
   for (let i = 0; i < 192; i++) status = (await guess(`10.0.${i >> 8}.${i & 255}`)).status
   assert.equal(status, 401)
   assert.equal((await guess('10.9.9.9')).status, 429)
-  assert.equal((await signIn(code, address.origin, 'atelier.example.org', from('198.51.100.4'))).status, 429)
+  // A newcomer waits, even with the right code. Someone who has signed in before does not.
+  assert.equal((await signIn(code, address.origin, 'atelier.example.org', from('10.9.9.8'))).status, 429)
+  assert.equal((await signIn(code, address.origin, 'atelier.example.org', from('198.51.100.4'))).status, 200)
+})
+
+test('tries held open and released together are counted one by one', async () => {
+  const { port } = await serve()
+  const lan = `192.168.1.20:${port}`
+  const body = JSON.stringify({ code: 'AAAABBBB' })
+  const held: http.ClientRequest[] = []
+  const agent = new http.Agent({ keepAlive: false })
+  const answers = Array.from(
+    { length: 40 },
+    () =>
+      new Promise<number>((done, fail) => {
+        const req = http.request(
+          { port, host: '127.0.0.1', agent, path: '/_foliome/login', method: 'POST', headers: { host: lan, origin: `http://${lan}`, 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) } },
+          (res) => {
+            res.resume()
+            res.on('end', () => done(res.statusCode ?? 0))
+          },
+        )
+        req.on('error', fail)
+        req.flushHeaders()
+        held.push(req)
+      }),
+  )
+  await new Promise((done) => setTimeout(done, 200))
+  for (const req of held) req.end(body)
+  const statuses = await Promise.all(answers)
+  assert.equal(statuses.filter((status) => status === 401).length, 8)
+  assert.equal(statuses.filter((status) => status === 429).length, 32)
+})
+
+test('a restart wipes neither the count of wrong codes nor the code', async () => {
+  const first = await serve()
+  const lan = `192.168.1.20:${first.port}`
+  for (let i = 0; i < 8; i++) assert.equal((await first.signIn('AAAABBBB', `http://${lan}`, lan)).status, 401)
+
+  const second = await serve({ root: first.root })
+  const again = `192.168.1.20:${second.port}`
+  assert.equal(second.code, first.code)
+  assert.equal((await second.signIn(second.code, `http://${again}`, again)).status, 429)
+  assert.doesNotMatch(await readFile(path.join(first.root, '.foliome', 'local.json'), 'utf8'), /127\.0\.0\.1/)
 })
 
 test('what comes before publishing is done before the command runs', async () => {
