@@ -1,0 +1,64 @@
+@font-face {
+  font-family: 'Syne';
+  src: url('/fonts/syne-latin-wght-normal.woff2') format('woff2');
+  font-weight: 400 800;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Spectral';
+  src: url('/fonts/spectral-latin-400-normal.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: light;
+  --sheet: #ffdf3d;
+  --print: #1a1fa8;
+  --gutter: clamp(16px, 3.4vw, 48px);
+}
+
+body {
+  margin: 0;
+  padding: 14px var(--gutter) clamp(48px, 8vw, 96px);
+  background: var(--sheet);
+  color: var(--print);
+  font: 400 clamp(1.05rem, 0.95rem + 0.35vw, 1.2rem)/1.6 'Spectral', Georgia, serif;
+}
+
+a { color: inherit; }
+
+:focus-visible {
+  outline: 2px solid #e5197d;
+  outline-offset: 2px;
+}
+
+.lang {
+  float: right;
+  padding: 8px 0;
+  font: 600 0.95rem/1.2 'Syne', sans-serif;
+  text-underline-offset: 0.2em;
+}
+
+.brand {
+  display: inline-block;
+  padding: 8px 0;
+  font: 800 1.15rem/1 'Syne', sans-serif;
+  text-decoration: none;
+}
+
+h1 {
+  margin: 0.6em 0 0.8em;
+  font: 800 clamp(2.2rem, 1rem + 5.4vw, 5.6rem)/1.05 'Syne', sans-serif;
+  letter-spacing: -0.025em;
+}
+
+h2 {
+  margin: 1.8em 0 0.3em;
+  font: 700 1.25em/1.2 'Syne', sans-serif;
+}
+
+p {
+  max-width: 36em;
+  margin: 0 0 0.7em;
+}

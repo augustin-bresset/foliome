@@ -1,0 +1,635 @@
+@font-face {
+  font-family: 'Syne';
+  src: url('/fonts/syne-latin-wght-normal.woff2') format('woff2');
+  font-weight: 400 800;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Spectral';
+  src: url('/fonts/spectral-latin-400-normal.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Spectral';
+  src: url('/fonts/spectral-latin-600-normal.woff2') format('woff2');
+  font-weight: 600;
+  font-display: swap;
+}
+
+/* The page is a sheet of coloured paper printed in one ink. Both can be changed by the visitor, so nothing below names a colour. */
+:root {
+  color-scheme: light;
+  --sheet: #ffdf3d;
+  --print: #1a1fa8;
+  /* The editor's own colours: a tool laid over the artwork, not part of it. */
+  --ink: #17171c;
+  --paper: #fff;
+  --fog: #f2f2f5;
+  --line: #d8d8df;
+  --muted: #6b6b76;
+  --guide: #e5197d;
+  --guide-deep: #b80f62;
+  --gutter: clamp(16px, 3.4vw, 48px);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--sheet);
+  color: var(--print);
+  font: 400 clamp(1.1rem, 0.95rem + 0.5vw, 1.35rem)/1.55 'Spectral', Georgia, serif;
+}
+
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+
+:focus-visible {
+  outline: 2px solid var(--guide);
+  outline-offset: 2px;
+}
+
+/* Top of the sheet */
+
+.top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 14px var(--gutter);
+}
+
+.top-end {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.lang {
+  color: inherit;
+  font: 600 0.95rem/1.2 'Syne', sans-serif;
+  text-underline-offset: 0.2em;
+}
+
+.brand {
+  color: inherit;
+  font: 800 1.15rem/1 'Syne', sans-serif;
+  text-decoration: none;
+}
+
+.signin {
+  padding: 8px 15px;
+  border: 2px solid var(--print);
+  border-radius: 999px;
+  background: none;
+  font: 600 0.95rem/1.2 'Syne', sans-serif;
+}
+
+.signin:hover {
+  background: var(--print);
+  color: var(--sheet);
+}
+
+/* Each sheet stays put once read, and the next one is laid over it. */
+.sheet-of-paper {
+  position: sticky;
+  top: 0;
+  background: var(--sheet);
+  box-shadow: 0 -10px 24px -14px rgb(0 0 0 / 0.3);
+}
+
+/* First sheet: the visitor's name, across its whole width */
+
+.first {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100svh - 62px);
+  padding: 34px var(--gutter) var(--gutter);
+  box-shadow: none;
+}
+
+.name {
+  margin: 0;
+  font: 800 12vw/1 'Syne', sans-serif;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+}
+
+.role {
+  margin: 0.5em 0 0;
+  font-size: clamp(1.25rem, 1rem + 1.1vw, 1.9rem);
+  line-height: 1.3;
+}
+
+.what {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px 64px;
+  margin-top: auto;
+  padding-top: 48px;
+}
+
+.what p { margin: 0; }
+
+.pitch {
+  flex: 1 1 12em;
+  max-width: 14em;
+  font: 700 clamp(2.1rem, 1rem + 4.5vw, 5.4rem)/1.06 'Syne', sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.try {
+  flex: 0 1 19em;
+  font-size: 1rem;
+  line-height: 1.45;
+}
+
+/* Editable zones, marked the way the editor marks them */
+
+.zone {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  white-space: inherit;
+}
+
+.zone:hover,
+.zone.is-reached,
+.zone.is-active,
+.is-waiting .zone-first {
+  box-shadow: 0 0 0 2px var(--guide), 0 0 0 3.5px rgb(255 255 255 / 0.9);
+}
+
+.zone.is-active {
+  box-shadow: 0 0 0 2px var(--guide-deep), 0 0 0 3.5px #fff;
+}
+
+.zone::before {
+  content: attr(data-tag);
+  position: absolute;
+  left: -2px;
+  bottom: calc(100% + 2px);
+  display: none;
+  padding: 4px 9px;
+  border-radius: 6px 6px 6px 0;
+  background: var(--guide-deep);
+  color: #fff;
+  font: 600 12px/1.45 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.zone:hover::before,
+.zone.is-reached::before,
+.is-waiting .zone-first::before {
+  display: block;
+}
+
+.zone.is-active::before { display: none; }
+
+.dot {
+  display: inline-block;
+  width: 0.62em;
+  height: 0.62em;
+  margin-right: 0.4em;
+  border-radius: 50%;
+  background: var(--sheet);
+  box-shadow: 0 0 0 2px var(--print);
+}
+
+/* Second sheet, printed the other way round */
+
+.second {
+  padding: clamp(56px, 9vw, 120px) var(--gutter);
+  background: var(--print);
+  color: var(--sheet);
+}
+
+.second h2,
+.third h2,
+.fourth h2,
+.fifth h2 {
+  max-width: 15em;
+  margin: 0 0 1.1em;
+  font: 800 clamp(2rem, 1.1rem + 3.4vw, 4rem)/1.05 'Syne', sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 32px clamp(24px, 4vw, 64px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+
+.steps li { counter-increment: step; }
+
+.steps li::before {
+  content: counter(step);
+  display: block;
+  margin-bottom: 0.1em;
+  font: 800 clamp(4rem, 2rem + 8vw, 9rem)/1 'Syne', sans-serif;
+}
+
+.steps h3 {
+  margin: 0 0 0.4em;
+  font: 700 1.3em/1.2 'Syne', sans-serif;
+}
+
+.steps p {
+  max-width: 28em;
+  margin: 0;
+}
+
+/* Third sheet */
+
+.third {
+  padding: clamp(56px, 9vw, 120px) var(--gutter) clamp(40px, 6vw, 80px);
+}
+
+.cares {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px clamp(24px, 5vw, 80px);
+  margin: 0;
+}
+
+.cares dt {
+  font: 700 1.2em/1.25 'Syne', sans-serif;
+}
+
+.cares dd {
+  max-width: 26em;
+  margin: 0.25em 0 0;
+}
+
+/* Fourth sheet, printed the other way round again: the sites, by name */
+
+.fourth {
+  padding: clamp(56px, 9vw, 120px) var(--gutter);
+  background: var(--print);
+  color: var(--sheet);
+}
+
+.made {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.made li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0 32px;
+  padding: 0.7em 0 0.9em;
+  border-top: 2px solid;
+}
+
+.made-name {
+  flex: 1 0 100%;
+  color: inherit;
+  font: 800 clamp(2.4rem, 1rem + 6vw, 6.5rem)/1.05 'Syne', sans-serif;
+  letter-spacing: -0.03em;
+  text-underline-offset: 0.12em;
+  text-decoration-thickness: 0.06em;
+}
+
+/* Last sheet */
+
+.fifth {
+  padding: clamp(56px, 9vw, 120px) var(--gutter) clamp(32px, 4vw, 48px);
+}
+
+.fifth h2 { margin-bottom: 0.5em; }
+
+.fifth p {
+  max-width: 34em;
+  margin: 0 0 1em;
+}
+
+.fifth a { color: inherit; }
+
+.mail {
+  display: inline-block;
+  margin: 0.3em 0 0.6em;
+  /* The address keeps to one line: it is about 19.8em wide. */
+  font: 800 min(calc((100vw - 2 * var(--gutter)) / 20.6), 5rem)/1.1 'Syne', sans-serif;
+  letter-spacing: -0.02em;
+  text-underline-offset: 0.12em;
+  text-decoration-thickness: 0.06em;
+}
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-top: clamp(56px, 8vw, 96px);
+}
+
+.foot-end {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+}
+
+.legal { font-size: 1rem; }
+
+.foot .brand { font-size: clamp(2.4rem, 1rem + 6vw, 6rem); letter-spacing: -0.03em; }
+
+/* The editor's panel */
+
+.panel {
+  position: fixed;
+  z-index: 20;
+  left: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  width: min(360px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  border-radius: 14px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 0 0 1px rgb(23 23 28 / 0.1), 0 18px 44px -12px rgb(23 23 28 / 0.4);
+  font: 14px/1.45 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  animation: appear 0.14s ease-out;
+}
+
+.panel[hidden] { display: none; }
+
+@keyframes appear {
+  from { opacity: 0; transform: translateY(4px) scale(0.99); }
+}
+
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 12px 2px 16px;
+}
+
+.panel-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.panel-context {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.close {
+  position: relative;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+}
+
+.close:hover { background: var(--fog); }
+
+.close::before,
+.close::after {
+  content: '';
+  position: absolute;
+  left: 7px;
+  right: 7px;
+  top: 13px;
+  height: 1.6px;
+  border-radius: 1px;
+  background: var(--ink);
+  transform: rotate(45deg);
+}
+
+.close::after { transform: rotate(-45deg); }
+
+.panel-form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin: 0;
+}
+
+.panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px 16px 4px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.input {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: var(--fog);
+  font-size: 15px;
+  outline: none;
+}
+
+.input:hover { border-color: var(--line); }
+
+.input:focus-visible {
+  border-color: var(--guide);
+  background: var(--paper);
+  box-shadow: 0 0 0 3px rgb(229 25 125 / 0.18);
+  outline: none;
+}
+
+.color-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.color-well {
+  flex: none;
+  width: 44px;
+  height: 38px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--paper);
+  cursor: pointer;
+}
+
+.color-well::-webkit-color-swatch-wrapper { padding: 0; }
+.color-well::-webkit-color-swatch { border: none; border-radius: 6px; }
+.color-well::-moz-color-swatch { border: none; border-radius: 6px; }
+
+.color-code { text-transform: lowercase; font-variant-numeric: tabular-nums; }
+
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.swatch {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid rgb(0 0 0 / 0.14);
+  border-radius: 50%;
+}
+
+.swatch[aria-pressed='true'] {
+  box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--ink);
+}
+
+.panel-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px 16px;
+}
+
+.btn {
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--paper);
+  font-weight: 600;
+}
+
+.btn:hover { background: var(--fog); }
+
+.btn.is-primary {
+  border-color: var(--guide-deep);
+  background: var(--guide-deep);
+  color: #fff;
+}
+
+.btn.is-primary:hover { background: #9c0b52; }
+
+.btn:disabled { opacity: 0.45; cursor: default; }
+
+.error {
+  margin: 0;
+  color: #b3261e;
+  font-size: 13.5px;
+}
+
+.toast {
+  position: fixed;
+  z-index: 30;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 32px);
+  padding: 8px 15px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  font: 550 14px/1.45 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.14), 0 12px 30px -10px rgb(0 0 0 / 0.55);
+}
+
+.toast[hidden] { display: none; }
+
+.whole { white-space: nowrap; }
+
+/* The hand that shows how it works, until the visitor takes over. */
+.ghost {
+  position: fixed;
+  z-index: 40;
+  left: 0;
+  top: 0;
+  width: 26px;
+  height: 26px;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.35));
+  transform: translate(var(--ghost-x, 72vw), var(--ghost-y, 78vh));
+  transition: transform 0.72s cubic-bezier(0.65, 0, 0.2, 1);
+}
+
+.ghost[hidden] { display: none; }
+
+.ghost svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: 4px 3px;
+  transition: transform 0.1s ease-out;
+}
+
+.ghost.is-pressing svg { transform: scale(0.78); }
+
+/* A new paper spreads from the swatch that was chosen. */
+::view-transition-old(root) { animation: none; }
+
+::view-transition-new(root) {
+  animation: spread 0.72s cubic-bezier(0.7, 0, 0.2, 1);
+}
+
+@keyframes spread {
+  from { clip-path: circle(0 at var(--spread-x, 50%) var(--spread-y, 50%)); }
+  to { clip-path: circle(150vmax at var(--spread-x, 50%) var(--spread-y, 50%)); }
+}
+
+@media (max-width: 800px) {
+  .steps, .cares { grid-template-columns: minmax(0, 1fr); }
+  .steps li { display: grid; grid-template-columns: 5.4rem minmax(0, 1fr); column-gap: 14px; }
+  .steps li::before { grid-row: span 2; font-size: 4.5rem; }
+}
+
+/* On a phone the panel is a sheet at the bottom, as in the editor. */
+@media (max-width: 600px) {
+  .first { min-height: 0; }
+  .panel {
+    left: 0 !important;
+    top: auto !important;
+    bottom: 0;
+    width: 100%;
+    max-height: 70vh;
+    border-radius: 14px 14px 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel { animation: none; }
+  .sheet-of-paper { position: static; }
+  ::view-transition-new(root) { animation: none; }
+}
