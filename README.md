@@ -1,4 +1,8 @@
+<img src=".github/logo.svg" width="96" height="96" alt="">
+
 # Foliome
+
+Site : [foliome.eu](https://foliome.eu)
 
 Des sites de portfolio codés sur mesure, que l'artiste met à jour lui-même : il clique sur une zone du site, un panneau s'ouvre à côté, il modifie, c'est enregistré.
 
