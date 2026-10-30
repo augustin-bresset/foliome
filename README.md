@@ -159,6 +159,23 @@ Seule la version préparée est conservée : l'original reste chez l'artiste. Ch
 FOLIOME_PUBLISH="npm run build && rsync -a dist/ serveur:/var/www/site/" npm run edit
 ```
 
+## Garder le contenu dans git
+
+Sur un serveur que l'artiste utilise seul, l'option `git` enregistre son travail dans le dépôt du site. La démo la lit dans la variable `FOLIOME_GIT` :
+
+```js
+git: process.env.FOLIOME_GIT ? { push: true } : undefined,
+```
+
+- **Quand** : dix minutes après le dernier enregistrement, avant chaque mise en ligne, et à l'arrêt du serveur.
+- **Quoi** : `content/` et `public/media/`, rien d'autre. Le code en cours dans le dossier n'est jamais embarqué, ni un fichier encore en cours d'envoi.
+- **Qui** : les commits sont signés `Foliome (nom du site)`, sans configuration git sur la machine.
+- **Avec `push`** : ce qui est nouveau sur le dépôt distant est d'abord fusionné, puis les commits sont envoyés. Il faut une branche suivie (`git push -u`) et un accès sans mot de passe, par exemple une clé de déploiement.
+
+Rien de tout cela ne gêne l'artiste : en cas d'échec, l'enregistrement et la mise en ligne continuent, l'erreur apparaît dans le terminal du serveur et l'envoi est retenté à la fois suivante.
+
+Une fois le site sur un serveur, `content/` lui appartient : le modifier à la main ailleurs mène à un conflit, qui bloque l'envoi jusqu'à ce qu'il soit résolu. Le travail de l'artiste, lui, reste enregistré sur le serveur.
+
 ## Organisation
 
 | Dossier | Rôle |
@@ -166,7 +183,7 @@ FOLIOME_PUBLISH="npm run build && rsync -a dist/ serveur:/var/www/site/" npm run
 | `packages/core` | Types, chemins et opérations sur le contenu, formats de fichier, texte mis en forme, langues |
 | `packages/server` | L'API d'édition, indépendante du stockage ; stockage sur disque ; préparation des fichiers |
 | `packages/editor` | L'éditeur affiché par-dessus le site |
-| `packages/astro` | L'intégration Astro : édition locale, code d'accès, lecture du contenu |
+| `packages/astro` | L'intégration Astro : édition locale, code d'accès, lecture du contenu, enregistrement dans git |
 | `apps/demo` | Le site de référence |
 | `tests/e2e.mjs` | La séance d'édition rejouée dans un navigateur |
 

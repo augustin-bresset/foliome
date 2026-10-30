@@ -34,6 +34,8 @@ export interface LocalOptions {
   editorFile: string
   /** Shell command that builds and deploys the site, run from `root`. */
   publish?: string
+  /** Called before the publish command runs. */
+  beforePublish?: () => Promise<unknown>
   /** Called after every stored change. */
   onChange: () => void
 }
@@ -275,6 +277,7 @@ export async function createLocal(options: LocalOptions) {
     if (publishing) return c.json({ error: 'busy' }, 409)
     publishing = true
     try {
+      await options.beforePublish?.()
       // The command must build the public site, not an editable one: it must
       // not inherit what marks this process as an editing session.
       const env = { ...process.env }

@@ -158,3 +158,20 @@ test('wrong codes run out: for one visitor first, then for everybody', async () 
   assert.equal((await guess('10.9.9.9')).status, 429)
   assert.equal((await signIn(code, address.origin, 'atelier.example.org', from('198.51.100.4'))).status, 429)
 })
+
+test('what comes before publishing is done before the command runs', async () => {
+  let root = ''
+  const { signIn, ask, code } = await (async () => {
+    const site = await serve({
+      publish: 'cat before.txt',
+      beforePublish: () => writeFile(path.join(root, 'before.txt'), 'committed'),
+    })
+    root = site.root
+    return site
+  })()
+  const origin = 'http://192.168.1.20:4321'
+  const host = '192.168.1.20:4321'
+  const { cookie } = await signIn(code, origin, host)
+  const { text } = await ask('/_foliome/publish', { method: 'POST', host, headers: { origin, ...session(cookie) } })
+  assert.deepEqual(JSON.parse(text), { ok: true, log: 'committed' })
+})
