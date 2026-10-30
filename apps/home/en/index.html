@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Foliome</title>
+<meta name="description" content="A portfolio site designed just for you, that you update yourself: click what you want to change and a panel opens right beside it.">
+<meta name="theme-color" content="#ffdf3d">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23ffdf3d'/%3E%3Cpath d='M9 7h15v5H15v4h8v5h-8v5H9z' fill='%231a1fa8'/%3E%3C/svg%3E">
+<link rel="alternate" hreflang="fr" href="https://foliome.eu/">
+<link rel="alternate" hreflang="en" href="https://foliome.eu/en/">
+<link rel="preload" href="/fonts/syne-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/home.css">
+</head>
+<body class="is-waiting">
+
+<header class="top">
+  <a class="brand" href="/en/">Foliome</a>
+  <div class="top-end">
+    <a class="lang" href="/" hreflang="fr" lang="fr" aria-label="Version française">FR</a>
+    <button type="button" class="signin" id="signin">Go to my site</button>
+  </div>
+</header>
+
+<main>
+  <section class="sheet-of-paper first">
+    <h1 class="name" id="name-line"><button type="button" class="zone zone-first" id="name" data-tag="Your name: click to change"><span id="name-text">Your name</span></button></h1>
+    <p class="role"><button type="button" class="zone" id="role" data-tag="Your work">Your discipline, your city</button></p>
+    <div class="what">
+      <p class="pitch">A portfolio site designed just for you, that you update yourself.</p>
+      <p class="try"><button type="button" class="zone" id="sheet" data-tag="Paper colour"><span class="dot"></span>Change the colour of the page</button><br>This page edits the way your site does: click something and a panel opens right beside it.</p>
+    </div>
+  </section>
+
+  <section class="sheet-of-paper second">
+    <h2>Your site changes when you decide.</h2>
+    <ol class="steps">
+      <li>
+        <h3>It is made for you</h3>
+        <p>I design and code it from scratch, with its own animation and character. Nothing comes from a template.</p>
+      </li>
+      <li>
+        <h3>You edit it from home</h3>
+        <p>Open it with your access code, on a computer or a phone, with nothing to install. Click a text, an image, a colour.</p>
+      </li>
+      <li>
+        <h3>You publish it</h3>
+        <p>One button, and your visitors see the new version. You don’t have to ask anyone.</p>
+      </li>
+    </ol>
+  </section>
+
+  <section class="sheet-of-paper third">
+    <h2>Foliome takes care of the rest.</h2>
+    <dl class="cares">
+      <div>
+        <dt>Your photos</dt>
+        <dd>Send them as they are, even from your phone. They are straightened, made lighter, and their GPS location is removed.</dd>
+      </div>
+      <div>
+        <dt>All your files</dt>
+        <dd>PDFs, sounds, 3D models, archives: every format is accepted.</dd>
+      </div>
+      <div>
+        <dt>Your way back</dt>
+        <dd>Undo up to a hundred changes if you don’t like the result.</dd>
+      </div>
+      <div>
+        <dt>Your languages</dt>
+        <dd>One tab per language, beside each text to translate.</dd>
+      </div>
+    </dl>
+  </section>
+
+  <section class="sheet-of-paper fourth">
+    <h2>Sites made so far.</h2>
+    <ul class="made">
+      <li>
+        <span class="made-name">Tom Conan</span>
+        <span>Art director, Paris</span>
+        <span>Online soon</span>
+      </li>
+      <li>
+        <span class="made-name">Ulysse Gohin</span>
+        <span>Sound, visual and set design artist, Strasbourg</span>
+        <span>Online soon</span>
+      </li>
+    </ul>
+  </section>
+
+  <section class="sheet-of-paper fifth">
+    <h2>A site in mind? <span class="whole">Write to me.</span></h2>
+    <p>I design and code portfolio sites for artists, architects and designers. Foliome is the tool I built so that you can then edit them yourself.</p>
+    <a class="mail" href="mailto:augustin_650@hotmail.fr">augustin_650@hotmail.fr</a>
+    <p>Foliome’s code is public: <a href="https://github.com/augustin-bresset/foliome">see the repository on GitHub</a>.</p>
+    <footer class="foot">
+      <a class="brand" href="/en/">Foliome</a>
+      <span class="foot-end">
+        <a class="legal" href="/en/legal-notice/">Legal notice</a>
+        <button type="button" class="signin" id="signin-foot">Go to my site</button>
+      </span>
+    </footer>
+  </section>
+</main>
+
+<div class="panel" id="panel" role="dialog" aria-labelledby="panel-title" hidden>
+  <header class="panel-head">
+    <div>
+      <h2 class="panel-title" id="panel-title"></h2>
+      <p class="panel-context" id="panel-context"></p>
+    </div>
+    <button type="button" class="close" id="panel-close" aria-label="Close"></button>
+  </header>
+  <form class="panel-form" id="panel-form">
+    <div class="panel-body" id="panel-body"></div>
+    <div class="panel-foot">
+      <button type="button" class="btn" id="panel-cancel">Cancel</button>
+      <button type="submit" class="btn is-primary" id="panel-submit">Save</button>
+    </div>
+  </form>
+</div>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<div class="ghost" id="ghost" aria-hidden="true" hidden>
+  <svg viewBox="0 0 24 24"><path d="M4 2.5v17.2l4.7-4.5 3 6.9 3.3-1.5-3-6.7 6.5-.4z" fill="#fff" stroke="#17171c" stroke-width="1.6" stroke-linejoin="round"/></svg>
+</div>
+
+<script src="/home.js"></script>
+</body>
+</html>
