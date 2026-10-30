@@ -5,6 +5,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Fields } from '@foliome/core'
 import type { AstroIntegration } from 'astro'
+import { contentHistory } from './git.ts'
 import { createLocal, formatCode } from './local.ts'
 
 export type { Asset, FieldDef, Fields, GroupDef, ItemType, ListDef, RichText, Schema } from '@foliome/core'
@@ -29,6 +30,13 @@ export interface FoliomeOptions {
    * a tunnel's requests cannot be told from the developer's own.
    */
   address?: string
+  /**
+   * Commits what the artist changes (`content/` and `public/media/`, nothing else) to the site's git repository: once
+   * they have stopped saving for ten minutes, before each publish, and when the server stops. With `push`, the commits
+   * also go to the remote, after a merge of what is new there. Meant for a server the artist reaches on their own; a
+   * developer working in the same folder commits for themselves.
+   */
+  git?: { push?: boolean }
 }
 
 // Runs before anything else on the page. The editor only loads for someone who
@@ -36,7 +44,7 @@ export interface FoliomeOptions {
 const LOADER = `(function(){try{var q=new URLSearchParams(location.search);if(q.has('edit')||localStorage.getItem('foliome')==='1'){if(sessionStorage.getItem('foliome:quiet')){document.documentElement.classList.add('foliome-quiet')}var s=document.createElement('script');s.src='/_foliome/editor.js';s.defer=true;document.head.appendChild(s)}}catch(e){}})()`
 
 export default function foliome(options: FoliomeOptions): AstroIntegration {
-  const { name, content, locales, publish, allowedHosts = [] } = options
+  const { name, content, locales, publish, allowedHosts = [], git } = options
   let outside: URL | undefined
   if (options.address) {
     try {
@@ -50,6 +58,8 @@ export default function foliome(options: FoliomeOptions): AstroIntegration {
   }
   let root = process.cwd()
   let local: Awaited<ReturnType<typeof createLocal>> | undefined
+  let history: ReturnType<typeof contentHistory> | undefined
+  let listening = false
   let code = ''
   let missing: string[] = []
 
@@ -94,9 +104,23 @@ export default function foliome(options: FoliomeOptions): AstroIntegration {
         process.env.FOLIOME_LOCALES = (locales ?? []).join(',')
       },
 
-      'astro:server:setup': async ({ server }) => {
+      'astro:server:setup': async ({ server, logger }) => {
         process.env.FOLIOME_EDITABLE = '1'
         const editorPackage = createRequire(import.meta.url).resolve('@foliome/editor/package.json')
+        if (git) {
+          const session = contentHistory({ root, name, push: git.push, warn: (message) => logger.warn(message) })
+          history = session
+          // Whatever a server that went down left uncommitted or unsent.
+          session.changed()
+          // Vite answers SIGTERM by closing this server, then exits at once. Astro's hooks are not called.
+          const close = server.close.bind(server)
+          server.close = () => session.close().then(close)
+          // Nothing answers SIGINT: the process would end on the spot. A restart comes back here, and once is enough.
+          if (!listening) {
+            listening = true
+            process.once('SIGINT', () => void history?.close().then(() => process.kill(process.pid, 'SIGINT')))
+          }
+        }
         local = await createLocal({
           root,
           name,
@@ -104,6 +128,7 @@ export default function foliome(options: FoliomeOptions): AstroIntegration {
           allowedHosts,
           address: outside,
           publish,
+          beforePublish: history?.flush,
           editorFile: path.join(path.dirname(editorPackage), 'dist', 'editor.js'),
           // Pages are rendered from the content file, which Vite does not know
           // they depend on. Astro also keeps the list of dynamic routes
@@ -113,6 +138,7 @@ export default function foliome(options: FoliomeOptions): AstroIntegration {
             for (const [environment, { moduleGraph }] of Object.entries(server.environments)) {
               if (environment !== 'client') moduleGraph.invalidateAll()
             }
+            history?.changed()
           },
         })
         code = local.code

@@ -14,6 +14,8 @@ export default defineConfig({
       // Where a tunnel makes this server reachable from outside, e.g. FOLIOME_ADDRESS="https://atelier.example.org".
       // Once set, the access code is asked of everyone, on this machine too.
       address: process.env.FOLIOME_ADDRESS,
+      // Keeps what the artist changes in git. Meant for a server: FOLIOME_GIT=1, and the commits go to the remote too.
+      git: process.env.FOLIOME_GIT ? { push: true } : undefined,
       content: {
         site: {
           type: 'group',
