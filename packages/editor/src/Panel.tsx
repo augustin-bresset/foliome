@@ -35,8 +35,11 @@ interface Props {
   onDirty: (dirty: boolean) => void
   onClose: () => void
   onOpen: (open: Open) => void
-  /** Called once a change is stored. `goto` is the page to show next, when it is not the current one. */
-  onSaved: (message: string, goto?: string) => void
+  /**
+   * Called once a change is stored. `goto` is the page to show next, when it is not the current one. `live` is true
+   * when the page already shows the change (see `foliome:preview`) and needs no reload.
+   */
+  onSaved: (message: string, goto?: string, live?: boolean) => void
 }
 
 /** What a panel edits: a set of fields hanging from one place in the content. */
@@ -149,6 +152,34 @@ export function Panel({ schema, content, open, nudge, onDirty, onClose, onOpen, 
     onDirty(dirty)
     return () => onDirty(false)
   }, [dirty])
+
+  // The site may show some changes while they are being made, a colour or a light for instance: each draft value is
+  // sent to it as a `foliome:preview` event, and it calls preventDefault() on the ones it applied. Those need no
+  // reload once saved, and are put back as they were if the panel closes without saving.
+  const sent = useRef(initial)
+  const shown = useRef(new Set<string>())
+  const kept = useRef(false)
+  const preview = (name: string, value: unknown) => {
+    const path = form?.prefix ? `${form.prefix}.${name}` : name
+    const event = new CustomEvent('foliome:preview', { detail: { path, value }, cancelable: true })
+    window.dispatchEvent(event)
+    if (event.defaultPrevented) shown.current.add(name)
+  }
+  useEffect(() => {
+    if (open.kind === 'create') return
+    for (const name of Object.keys(form?.fields ?? {})) {
+      if (same(draft[name], sent.current[name])) continue
+      preview(name, draft[name])
+      sent.current = { ...sent.current, [name]: draft[name] }
+    }
+  }, [draft])
+  useEffect(
+    () => () => {
+      if (kept.current) return
+      for (const name of shown.current) if (!same(sent.current[name], initial[name])) preview(name, initial[name])
+    },
+    [],
+  )
 
   // The panel sits beside its zone and follows it while the page moves. It
   // picks a side once, so it does not jump around during a scroll.
@@ -277,7 +308,8 @@ export function Panel({ schema, content, open, nudge, onDirty, onClose, onOpen, 
           return { op: 'set', path: form.prefix ? `${form.prefix}.${name}` : name, value: next }
         }),
       )
-      onSaved('Enregistré')
+      kept.current = true
+      onSaved('Enregistré', undefined, changed.every((name) => shown.current.has(name)))
     })
 
   const remove = () =>

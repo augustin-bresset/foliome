@@ -54,6 +54,11 @@ export type SelectDef = FieldBase & { type: 'select'; options: string[] }
 export type FileDef = FieldBase & { type: 'file'; kinds?: FileKind[] }
 export type FilesDef = FieldBase & { type: 'files'; kinds?: FileKind[] }
 
+/** A colour, as `#rrggbb`. `swatches` are colours offered in one click, e.g. the site's palette. */
+export type ColorDef = FieldBase & { type: 'color'; swatches?: string[] }
+/** A number set with a slider, from `min` to `max`. */
+export type RangeDef = FieldBase & { type: 'range'; min: number; max: number; step?: number; unit?: string }
+
 /** A fixed set of fields that exists once, e.g. the studio's presentation. */
 export type GroupDef = FieldBase & { type: 'group'; fields: Fields }
 
@@ -85,7 +90,7 @@ export type ListDef = FieldBase & {
   types?: Record<string, ItemType>
 }
 
-export type FieldDef = TextDef | LongTextDef | RichTextDef | SelectDef | FileDef | FilesDef | GroupDef | ListDef
+export type FieldDef = TextDef | LongTextDef | RichTextDef | SelectDef | ColorDef | RangeDef | FileDef | FilesDef | GroupDef | ListDef
 export type Fields = Record<string, FieldDef>
 
 export interface Schema {

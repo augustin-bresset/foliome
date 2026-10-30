@@ -104,6 +104,10 @@ export function emptyValue(def: FieldDef): unknown {
       return []
     case 'select':
       return def.options[0] ?? ''
+    case 'color':
+      return def.swatches?.[0] ?? '#000000'
+    case 'range':
+      return def.min
     case 'group':
       return Object.fromEntries(Object.entries(def.fields).map(([name, field]) => [name, emptyValue(field)]))
     default:

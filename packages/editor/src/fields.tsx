@@ -163,6 +163,10 @@ function Input(props: FieldProps) {
           ))}
         </select>
       )
+    case 'color':
+      return <Color id={id} value={typeof value === 'string' ? value : ''} swatches={def.swatches} onChange={onChange} />
+    case 'range':
+      return <Range id={id} value={typeof value === 'number' ? value : def.min} def={def} onChange={onChange} />
     case 'file':
       return <OneFile id={id} value={value} kinds={def.kinds} context={context} onChange={onChange} />
     case 'files':
@@ -174,6 +178,66 @@ function Input(props: FieldProps) {
     case 'list':
       return <ItemList def={def} value={value} path={path} context={context} onChange={onChange} />
   }
+}
+
+const HEX = /^#[0-9a-f]{6}$/i
+
+/** A colour: the system picker, its code (to paste one from elsewhere), and the site's swatches. */
+function Color({ id, value, swatches, onChange }: { id: string; value: string; swatches?: string[]; onChange: (v: string) => void }) {
+  const [code, setCode] = useState(value)
+  useEffect(() => setCode(value), [value])
+  const valid = HEX.test(value) ? value.toLowerCase() : '#000000'
+  return (
+    <div class="color">
+      <div class="color-row">
+        <input id={id} class="color-well" type="color" value={valid} onInput={(e) => onChange(e.currentTarget.value)} />
+        <input
+          class="input color-code"
+          type="text"
+          value={code}
+          spellcheck={false}
+          aria-label="Code de la couleur"
+          onInput={(e) => {
+            const next = e.currentTarget.value.trim()
+            setCode(next)
+            const full = /^[0-9a-f]{6}$/i.test(next) ? `#${next}` : next
+            if (HEX.test(full)) onChange(full.toLowerCase())
+          }}
+          onBlur={() => setCode(value)}
+        />
+      </div>
+      {swatches && swatches.length > 0 && (
+        <div class="swatches">
+          {swatches.map((swatch) => (
+            <button
+              type="button"
+              class="swatch"
+              style={{ background: swatch }}
+              title={swatch}
+              aria-label={`Prendre ${swatch}`}
+              aria-pressed={swatch.toLowerCase() === valid}
+              onClick={() => onChange(swatch.toLowerCase())}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** A number on a slider, with its value written beside it. */
+function Range({ id, value, def, onChange }: { id: string; value: number; def: { min: number; max: number; step?: number; unit?: string }; onChange: (v: number) => void }) {
+  const step = def.step ?? (def.max - def.min) / 100
+  const digits = Math.max(0, Math.min(3, Math.ceil(-Math.log10(step))))
+  return (
+    <div class="range">
+      <input id={id} type="range" min={def.min} max={def.max} step={step} value={value} onInput={(e) => onChange(Number(e.currentTarget.value))} />
+      <output for={id} class="range-value">
+        {value.toFixed(digits).replace('.', ',')}
+        {def.unit ? ` ${def.unit}` : ''}
+      </output>
+    </div>
+  )
 }
 
 function LongText(props: { id: string; value: string; placeholder?: string; autoFocus?: boolean; onChange: (v: string) => void }) {
