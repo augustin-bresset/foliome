@@ -137,13 +137,16 @@ try {
     await page.goto(`${BASE}/?edit`)
     await settled()
     check('code prompt for a visitor from the network', await ed('.panel.is-narrow').isVisible())
+    const refused = await Promise.all(['/', '/src/pages/index.astro', '/@vite/client', '/.foliome/local.json'].map(async (url) => (await page.request.get(BASE + url)).status()))
+    check('and nothing of the site or its source before the code is given', refused.every((status) => status === 401), refused.join())
     await ed('#foliome-code').fill('AAAA-BBBB')
     await ed('button[type=submit]').click()
     await pause(400)
     check('wrong code is refused', (await text(ed('.error')))?.includes('pas le bon'))
     await ed('#foliome-code').fill(CODE.toLowerCase().replace('-', ' '))
     await ed('button[type=submit]').click()
-    await pause(800)
+    await ed('.bar').waitFor({ timeout: 30000 })
+    check('the code file stays out of reach once in', (await page.request.get(`${BASE}/.foliome/local.json`)).status() === 404)
   } else {
     skip('access code', 'no network interface')
     await page.goto(`${BASE}/?edit`)
@@ -486,10 +489,15 @@ try {
   await page.setViewportSize({ width: 1440, height: 900 })
   await bar('Quitter').click()
   await pause(400)
+  check('quitting removes the editor', (await page.locator('foliome-editor').count()) === 0)
   await page.reload()
   await settled()
-  check('quitting removes the editor for good', (await page.locator('foliome-editor').count()) === 0)
-  if (lan) check('and closes the session', (await page.request.get(`${BASE}/_foliome/content`)).status() === 401)
+  if (lan) {
+    // From the network, quitting is leaving: the next page asks for the code again.
+    check('and closes the session', (await ed('.panel.is-narrow').isVisible()) && (await page.request.get(`${BASE}/_foliome/content`)).status() === 401)
+  } else {
+    check('for good', (await page.locator('foliome-editor').count()) === 0)
+  }
 } catch (err) {
   results.push(`CRASH  ${String(err).split('\n')[0]}`)
   if (shots) await page.screenshot({ path: path.join(shots, 'crash.png') })
@@ -517,8 +525,8 @@ await rm(path.join(DEMO, '.foliome', 'history'), { recursive: true, force: true 
 await rm(path.join(DEMO, 'dist'), { recursive: true, force: true })
 await rm(tmp, { recursive: true, force: true })
 
-// Expected: the wrong code typed on purpose, the deleted project's page, and the editor checking whether an undone page still exists.
-const expected = [/401 POST \/_foliome\/login/, /status of 401/, /404 GET \/projets\/passerelle-du-giffre/, /404 HEAD \/en\/projets\/footbridge/, /status of 404/]
+// Expected: the page that asks for the code, before signing in and after quitting, the wrong code typed on purpose, the deleted project's page, and the editor checking whether an undone page still exists.
+const expected = [/401 GET \/(projets\/maison-sur-la-pente)?$/, /401 POST \/_foliome\/login/, /status of 401/, /404 GET \/projets\/passerelle-du-giffre/, /404 HEAD \/en\/projets\/footbridge/, /status of 404/]
 const unexpected = [...new Set(problems)].filter((p) => !expected.some((e) => e.test(p)))
 const failed = results.filter((r) => !r.startsWith('PASS') && !r.startsWith('SKIP'))
 console.log(results.join('\n'))

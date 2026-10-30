@@ -11,6 +11,9 @@ export default defineConfig({
       // The command behind the "Mettre en ligne" button, e.g. FOLIOME_PUBLISH="npm run deploy".
       // Left unset, the button is not shown.
       publish: process.env.FOLIOME_PUBLISH,
+      // Where a tunnel makes this server reachable from outside, e.g. FOLIOME_ADDRESS="https://atelier.example.org".
+      // Once set, the access code is asked of everyone, on this machine too.
+      address: process.env.FOLIOME_ADDRESS,
       content: {
         site: {
           type: 'group',

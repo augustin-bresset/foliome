@@ -2,7 +2,7 @@
 
 Des sites de portfolio codés sur mesure, que l'artiste met à jour lui-même : il clique sur une zone du site, un panneau s'ouvre à côté, il modifie, c'est enregistré.
 
-Première étape : **édition locale**. Le serveur de développement du site sert aussi d'outil d'édition. L'artiste s'y connecte depuis son propre appareil, sur le même réseau. Le site en ligne reste entièrement statique.
+Première étape : **édition locale**. Le serveur de développement du site sert aussi d'outil d'édition. L'artiste s'y connecte depuis son propre appareil, sur le même réseau ou de chez lui par un tunnel. Le site en ligne reste entièrement statique.
 
 ## Démarrer
 
@@ -21,7 +21,7 @@ npm run test:e2e   # une séance d'édition complète dans un vrai navigateur
 ## Une séance avec l'artiste
 
 1. `npm run edit` affiche un lien du type `http://192.168.1.20:4321/?edit=ABCD-EFGH`.
-2. L'artiste l'ouvre sur son appareil, connecté au même Wi-Fi. Le code est demandé à qui arrive sans ce lien.
+2. L'artiste l'ouvre sur son appareil, connecté au même Wi-Fi. Son navigateur est ensuite reconnu pendant trente jours. Le code est demandé à qui arrive sans ce lien.
 3. Il modifie ; chaque enregistrement est écrit dans le dossier du site :
    - `content/content.json` pour les textes et la structure ;
    - `public/media/` pour les fichiers, quel que soit leur format.
@@ -33,7 +33,21 @@ Dans la barre de l'éditeur :
 - **Contenu** : tout ce qui est modifiable, y compris ce qu'on ne peut pas cliquer sur la page (contenu dessiné en WebGL, états masqués).
 - **Annuler** : revient sur le dernier enregistrement (cent niveaux, gardés dans `.foliome/`, hors git).
 
-Le code d'accès est conservé dans `.foliome/local.json` ; supprimer ce fichier en génère un nouveau et ferme les sessions ouvertes. Le lien ouvre aussi le serveur de développement à tout le réseau : à réserver à un réseau de confiance.
+Le code d'accès est conservé dans `.foliome/local.json` ; supprimer ce fichier puis relancer le serveur en génère un nouveau et ferme les sessions ouvertes. Sans ce code, le serveur ne donne qu'une page qui le demande : ni le site, ni son code source. Seul le navigateur du développeur, sur l'ordinateur qui fait tourner le serveur, en est dispensé.
+
+## À distance, par un tunnel
+
+L'artiste n'a pas à être sur le même réseau. Un tunnel (Cloudflare Tunnel, ngrok, Tailscale Funnel…) donne une adresse publique au serveur de développement, tant que l'ordinateur est allumé et le serveur lancé. Il pointe vers `http://localhost:4321`, et son adresse doit être déclarée :
+
+```sh
+FOLIOME_ADDRESS="https://atelier.exemple.fr" npm run dev
+```
+
+Le terminal affiche alors le lien à envoyer à l'artiste, du type `https://atelier.exemple.fr/?edit=ABCD-EFGH`.
+
+Une fois l'adresse déclarée, le code est demandé à tout le monde, y compris sur l'ordinateur du développeur : ce qui arrive par un tunnel vient de cette machine aussi, et rien ne le distingue du navigateur du développeur. **Ne jamais ouvrir un tunnel vers le serveur sans la déclarer.**
+
+Dans la configuration du site, c'est l'option `address` ; la démo la lit dans `FOLIOME_ADDRESS`.
 
 ## Rendre un site éditable
 
@@ -161,4 +175,4 @@ FOLIOME_PUBLISH="npm run build && rsync -a dist/ serveur:/var/www/site/" npm run
 - Les fichiers retirés du contenu restent dans `public/media/`.
 - Une liste avec `path` (une page par élément) n'est prise en charge qu'au premier niveau du contenu.
 - Le texte mis en forme n'a été vérifié que dans Chrome.
-- La version hébergée (édition à distance, sans passer par l'ordinateur du développeur) : `packages/server` est prévu pour recevoir un second stockage.
+- La version hébergée (édition à distance sans que l'ordinateur du développeur soit allumé) : `packages/server` est prévu pour recevoir un second stockage.

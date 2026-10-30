@@ -10,14 +10,15 @@ import { createApp, type Storage } from '@foliome/server'
 import { fsStorage } from '@foliome/server/fs'
 import { detectTools } from '@foliome/server/media'
 import { getRequestListener, type HttpBindings } from '@hono/node-server'
-import { type Context, Hono, type MiddlewareHandler } from 'hono'
+import { Hono, type MiddlewareHandler } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
+import { parse } from 'hono/utils/cookie'
 
 /**
  * Local editing: the site's dev server doubles as the editing service.
  * Content is written to `content/content.json`, files to `public/media/`.
- * The developer's own browser is trusted; anyone else on the network needs
- * the access code.
+ * The developer's own browser is trusted; anyone else needs the access code,
+ * and is given nothing of the site or of its source without it.
  */
 
 export interface LocalOptions {
@@ -25,6 +26,11 @@ export interface LocalOptions {
   name: string
   schema: Schema
   allowedHosts: string[]
+  /**
+   * Where this server is reached from outside, when a tunnel leads to it. Nobody is then trusted for being on this
+   * machine: what comes through a tunnel arrives from this machine too.
+   */
+  address?: URL
   editorFile: string
   /** Shell command that builds and deploys the site, run from `root`. */
   publish?: string
@@ -46,6 +52,10 @@ const COOKIE = 'foliome_session'
 const SESSION_DAYS = 30
 const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1'])
+/** Wrong codes allowed in five minutes: from one visitor, and from everybody together. */
+const TRIES = 8
+const TRIES_IN_ALL = 200
+const EVERYBODY = '*'
 
 // No I, L, O, 0 or 1: the code is read aloud and typed by hand.
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
@@ -54,6 +64,11 @@ export const formatCode = (code: string) => `${code.slice(0, 4)}-${code.slice(4)
 const normalizeCode = (input: unknown) => String(input ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
 
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex')
+const isApi = (url: string) => {
+  const pathname = url.split('?')[0]
+  return pathname === API || !!pathname?.startsWith(`${API}/`)
+}
+const escapeHtml = (text: string) => text.replace(/[&<>"]/g, (char) => `&#${char.charCodeAt(0)};`)
 const hostName = (host: string | undefined) => (host ?? '').replace(/:\d+$/, '').replace(/^\[|\]$/g, '').toLowerCase()
 
 async function loadState(file: string): Promise<State> {
@@ -109,29 +124,74 @@ export async function createLocal(options: LocalOptions) {
       isIP(name) !== 0 ||
       name.endsWith('.local') ||
       name.endsWith('.localhost') ||
+      name === options.address?.hostname ||
       options.allowedHosts.includes(name)
     )
   }
 
-  /** The developer's own browser: a direct connection from this machine to a loopback address. */
-  const isThisMachine = (c: Context<Env>) =>
-    LOOPBACK_ADDRESSES.has(c.env.incoming.socket.remoteAddress ?? '') &&
-    LOOPBACK_HOSTS.has(hostName(c.req.header('host'))) &&
-    !c.req.header('x-forwarded-for') &&
-    !c.req.header('forwarded')
+  /**
+   * The developer's own browser: a direct connection from this machine to a loopback address. Behind a tunnel there
+   * is no telling it apart: the tunnel's requests come from this machine as well, under whatever name their sender
+   * chose.
+   */
+  const isThisMachine = (req: IncomingMessage) =>
+    !options.address &&
+    LOOPBACK_ADDRESSES.has(req.socket.remoteAddress ?? '') &&
+    LOOPBACK_HOSTS.has(hostName(req.headers.host)) &&
+    !req.headers['x-forwarded-for'] &&
+    !req.headers.forwarded
 
-  const isEditor = (c: Context<Env>) => {
-    const token = getCookie(c, COOKIE)
+  const isEditor = (req: IncomingMessage) => {
+    const token = parse(req.headers.cookie ?? '', COOKIE)[COOKIE]
     if (token && (state.sessions[sha256(token)] ?? 0) > Date.now()) return true
-    return isThisMachine(c)
+    return isThisMachine(req)
   }
 
   const guard: MiddlewareHandler<Env> = async (c, next) => {
-    if (!isEditor(c)) return c.json({ error: 'unauthorized' }, 401)
+    if (!isEditor(c.env.incoming)) return c.json({ error: 'unauthorized' }, 401)
     await next()
   }
 
+  // Wrong codes are counted per visitor, so that one who guesses does not shut the door on the artist, and for
+  // everybody together, since a visitor behind a tunnel is only who the tunnel says they are.
   const failures = new Map<string, { count: number; resetAt: number }>()
+  const spent = (who: string, most: number) => {
+    const record = failures.get(who)
+    return !!record && record.resetAt > Date.now() && record.count >= most
+  }
+  const fail = (who: string) => {
+    const now = Date.now()
+    for (const [key, record] of failures) if (record.resetAt <= now) failures.delete(key)
+    const record = failures.get(who)
+    failures.set(who, record ? { ...record, count: record.count + 1 } : { count: 1, resetAt: now + 5 * 60_000 })
+  }
+  const visitor = (req: IncomingMessage) => {
+    const through = options.address && String(req.headers['x-forwarded-for'] ?? '').split(',')[0]?.trim()
+    return through || (req.socket.remoteAddress ?? 'unknown')
+  }
+
+  // The folder that holds the access code. Vite hands any file of the project to whoever asks for it by name.
+  const isPrivate = (url: string) => {
+    let plain = url
+    try {
+      plain = decodeURIComponent(url)
+    } catch {
+      // Malformed: judged as written.
+    }
+    return /[\\/]\.foliome([\\/?#]|$)/i.test(plain)
+  }
+
+  // Whoever has not signed in is given one page, which asks for the code: the editor shows its prompt on it.
+  const doorPage = `<!doctype html><html lang="fr" data-foliome-door><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><link rel="icon" href="data:,"><title>${escapeHtml(options.name)}</title><style>html{background:#f2f2f5}</style></head><body><script src="${API}/editor.js"></script></body></html>`
+  const door = (req: IncomingMessage, res: ServerResponse) => {
+    const page = req.method === 'GET' && (req.headers.accept ?? '').includes('text/html')
+    res.writeHead(401, {
+      'content-type': `${page ? 'text/html' : 'text/plain'}; charset=utf-8`,
+      'cache-control': 'no-store',
+      'x-robots-tag': 'noindex',
+    })
+    res.end(page ? doorPage : 'unauthorized')
+  }
 
   const app = new Hono<Env>().basePath(API)
 
@@ -144,7 +204,8 @@ export async function createLocal(options: LocalOptions) {
     if (c.req.method !== 'GET' && c.req.method !== 'HEAD') {
       let sameOrigin = false
       try {
-        sameOrigin = new URL(c.req.header('origin') ?? '').host === host
+        const origin = new URL(c.req.header('origin') ?? '')
+        sameOrigin = origin.host === host || origin.origin === options.address?.origin
       } catch {
         // Missing or malformed Origin.
       }
@@ -153,27 +214,28 @@ export async function createLocal(options: LocalOptions) {
     await next()
   })
 
-  app.get('/session', (c) => c.json({ editor: isEditor(c) }))
+  app.get('/session', (c) => c.json({ editor: isEditor(c.env.incoming) }))
 
   app.post('/login', async (c) => {
-    const ip = c.env.incoming.socket.remoteAddress ?? 'unknown'
-    const now = Date.now()
-    const record = failures.get(ip)
-    if (record && record.resetAt > now && record.count >= 8) return c.json({ error: 'too_many' }, 429)
+    const who = visitor(c.env.incoming)
+    if (spent(who, TRIES) || spent(EVERYBODY, TRIES_IN_ALL)) return c.json({ error: 'too_many' }, 429)
 
     const body = (await c.req.json().catch(() => null)) as { code?: unknown } | null
     const given = Buffer.from(normalizeCode(body?.code))
     const expected = Buffer.from(state.code)
     if (given.length !== expected.length || !timingSafeEqual(given, expected)) {
-      failures.set(ip, record && record.resetAt > now ? { ...record, count: record.count + 1 } : { count: 1, resetAt: now + 5 * 60_000 })
+      fail(who)
+      fail(EVERYBODY)
       return c.json({ error: 'bad_code' }, 401)
     }
 
-    failures.delete(ip)
+    failures.delete(who)
     const token = randomBytes(32).toString('base64url')
-    state.sessions[sha256(token)] = now + SESSION_DAYS * 86_400_000
+    state.sessions[sha256(token)] = Date.now() + SESSION_DAYS * 86_400_000
     await save()
-    setCookie(c, COOKIE, token, { path: '/', httpOnly: true, sameSite: 'Lax', maxAge: SESSION_DAYS * 86_400 })
+    // Over the public address the cookie only ever travels encrypted.
+    const secure = options.address?.protocol === 'https:' && hostName(c.req.header('host')) === options.address.hostname
+    setCookie(c, COOKIE, token, { path: '/', httpOnly: true, sameSite: 'Lax', secure, maxAge: SESSION_DAYS * 86_400 })
     return c.json({ ok: true })
   })
 
@@ -289,9 +351,19 @@ export async function createLocal(options: LocalOptions) {
   return {
     code: state.code,
     tools,
-    middleware(req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) {
+    /** Whether a request comes from someone who may see the site. */
+    allows: isEditor,
+    /** The first thing a request meets, ahead of anything the dev server would answer by itself. */
+    gate(req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) {
       const url = req.url ?? ''
-      if (url === API || url.startsWith(`${API}/`)) return void api(req, res)
+      // The API answers for itself: signing in is open to all, the rest is guarded route by route.
+      if (isApi(url)) return next()
+      if (!isEditor(req)) return door(req, res)
+      if (isPrivate(url)) return void res.writeHead(404).end()
+      next()
+    },
+    middleware(req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) {
+      if (isApi(req.url ?? '')) return void api(req, res)
       media(req, res, next).catch(next)
     },
   }
