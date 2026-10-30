@@ -141,6 +141,8 @@ Ce que le site ignore se comporte comme avant : rechargement après l'enregistre
 
 `locales: ['fr', 'en']` dans la configuration (la première est celle par défaut), puis `translate: true` sur les champs de texte concernés. L'artiste voit alors un onglet par langue dans le panneau, ouvert sur la langue de la page (`<html lang>`). `getContent({ locale })` rend les valeurs dans la langue demandée, avec repli sur la langue par défaut. Les routes par langue restent l'affaire du site : la démo sert le français à la racine et l'anglais sous `/en`.
 
+L'éditeur, lui, parle la langue du navigateur de l'artiste, français ou anglais, quelle que soit la langue de la page. Les libellés écrits dans la configuration du site (`label`, `help`, `addLabel`) s'affichent tels quels.
+
 ## Fichiers
 
 À l'envoi, sur l'ordinateur qui héberge la séance :

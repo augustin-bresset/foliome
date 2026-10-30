@@ -1,5 +1,6 @@
 import { useState } from 'preact/hooks'
 import { api, ApiError } from './api.ts'
+import { t } from './i18n.ts'
 
 /** Without `onClose` there is nothing to go back to: the prompt stays until the code is given. */
 export function Login({ onSuccess, onClose }: { onSuccess: () => void; onClose?: () => void }) {
@@ -18,10 +19,10 @@ export function Login({ onSuccess, onClose }: { onSuccess: () => void; onClose?:
       const reason = err instanceof ApiError ? err.code : ''
       setError(
         reason === 'bad_code'
-          ? 'Ce code n’est pas le bon. Vérifiez-le et réessayez.'
+          ? t.badCode
           : reason === 'too_many'
-            ? 'Trop d’essais. Patientez cinq minutes avant de réessayer.'
-            : 'Impossible de joindre le site. Vérifiez votre connexion ; si elle fonctionne, l’ordinateur de votre développeur est peut-être éteint.',
+            ? t.tooMany
+            : t.unreachable,
       )
       setBusy(false)
     }
@@ -30,13 +31,13 @@ export function Login({ onSuccess, onClose }: { onSuccess: () => void; onClose?:
   return (
     <>
       <div class="scrim" />
-      <div class="panel is-centered is-narrow" role="dialog" aria-label="Modifier ce site">
+      <div class="panel is-centered is-narrow" role="dialog" aria-label={t.editThisSite}>
         <header class="panel-head">
           <div>
-            <h2 class="panel-title">Modifier ce site</h2>
-            <p class="panel-context">Saisissez le code d’accès donné par votre développeur.</p>
+            <h2 class="panel-title">{t.editThisSite}</h2>
+            <p class="panel-context">{t.enterCode}</p>
           </div>
-          {onClose && <button type="button" class="close" aria-label="Fermer" onClick={onClose} />}
+          {onClose && <button type="button" class="close" aria-label={t.close} onClick={onClose} />}
         </header>
         <form
           class="panel-form"
@@ -47,7 +48,7 @@ export function Login({ onSuccess, onClose }: { onSuccess: () => void; onClose?:
         >
           <div class="panel-body">
             <label class="label" for="foliome-code">
-              Code d’accès
+              {t.accessCode}
             </label>
             <input
               id="foliome-code"
@@ -69,7 +70,7 @@ export function Login({ onSuccess, onClose }: { onSuccess: () => void; onClose?:
           )}
           <footer class="panel-foot">
             <button type="submit" class="btn is-primary" disabled={busy || !code.trim()}>
-              Entrer
+              {t.enter}
             </button>
           </footer>
         </form>

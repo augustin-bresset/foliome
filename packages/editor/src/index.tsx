@@ -1,6 +1,7 @@
 import { render } from 'preact'
 import { api, setConversions } from './api.ts'
 import { App } from './App.tsx'
+import { lang } from './i18n.ts'
 import { Login } from './Login.tsx'
 import css from './styles.css'
 
@@ -58,6 +59,7 @@ async function boot() {
   // At the door there is no site behind the prompt yet, only the page that asks for the code. Once in, the page that
   // was asked for is loaded, with the editor on it.
   if (document.documentElement.hasAttribute('data-foliome-door')) {
+    document.documentElement.lang = lang
     const enter = () => {
       url.searchParams.set('edit', '')
       location.replace(url)

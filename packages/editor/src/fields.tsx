@@ -22,6 +22,7 @@ import {
 } from '@foliome/core'
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { explain, fits, pickerFor, upload } from './api.ts'
+import { lang, t } from './i18n.ts'
 
 /** Shared by every field of a panel. */
 export interface FieldContext {
@@ -117,14 +118,14 @@ function Translated(props: FieldProps) {
   const byLocale: Record<string, unknown> = isTranslated(value) ? value.$t : blank ? {} : { [locales[0]!]: value }
   return (
     <div class="translated">
-      <div class="tabs" role="tablist" aria-label="Langue">
+      <div class="tabs" role="tablist" aria-label={t.language}>
         {locales.map((l) => (
           <button
             type="button"
             role="tab"
             class={plainText(byLocale[l]).trim() ? 'tab' : 'tab is-empty'}
             aria-selected={l === locale}
-            title={plainText(byLocale[l]).trim() ? undefined : 'Pas encore traduit'}
+            title={plainText(byLocale[l]).trim() ? undefined : t.notTranslated}
             onClick={() => context.setLocale(l)}
           >
             {l}
@@ -196,7 +197,7 @@ function Color({ id, value, swatches, onChange }: { id: string; value: string; s
           type="text"
           value={code}
           spellcheck={false}
-          aria-label="Code de la couleur"
+          aria-label={t.colourCode}
           onInput={(e) => {
             const next = e.currentTarget.value.trim()
             setCode(next)
@@ -214,7 +215,7 @@ function Color({ id, value, swatches, onChange }: { id: string; value: string; s
               class="swatch"
               style={{ background: swatch }}
               title={swatch}
-              aria-label={`Prendre ${swatch}`}
+              aria-label={t.takeColour(swatch)}
               aria-pressed={swatch.toLowerCase() === valid}
               onClick={() => onChange(swatch.toLowerCase())}
             />
@@ -233,7 +234,7 @@ function Range({ id, value, def, onChange }: { id: string; value: number; def: {
     <div class="range">
       <input id={id} type="range" min={def.min} max={def.max} step={step} value={value} onInput={(e) => onChange(Number(e.currentTarget.value))} />
       <output for={id} class="range-value">
-        {value.toFixed(digits).replace('.', ',')}
+        {value.toFixed(digits).replace('.', t.decimal)}
         {def.unit ? ` ${def.unit}` : ''}
       </output>
     </div>
@@ -338,7 +339,7 @@ function Rich({ id, value, onChange }: { id: string; value: unknown; onChange: (
     const sel = selection()
     const range = sel && sel.rangeCount > 0 ? sel.getRangeAt(0) : null
     if (!range || range.collapsed || !area.current?.contains(range.commonAncestorContainer)) {
-      setHint('Sélectionnez d’abord le texte à transformer en lien.')
+      setHint(t.selectFirst)
       return
     }
     setHint(null)
@@ -364,15 +365,15 @@ function Rich({ id, value, onChange }: { id: string; value: unknown; onChange: (
 
   return (
     <div class="rich">
-      <div class="rich-tools" role="toolbar" aria-label="Mise en forme">
-        <button type="button" class="tool" aria-label="Gras" onMouseDown={keep} onClick={() => command('bold')}>
-          <b>G</b>
+      <div class="rich-tools" role="toolbar" aria-label={t.formatting}>
+        <button type="button" class="tool" aria-label={t.bold} onMouseDown={keep} onClick={() => command('bold')}>
+          <b>{t.boldLetter}</b>
         </button>
-        <button type="button" class="tool" aria-label="Italique" onMouseDown={keep} onClick={() => command('italic')}>
+        <button type="button" class="tool" aria-label={t.italic} onMouseDown={keep} onClick={() => command('italic')}>
           <i>I</i>
         </button>
         <button type="button" class="tool is-wide" onMouseDown={keep} onClick={startLink}>
-          Lien
+          {t.link}
         </button>
       </div>
       <div
@@ -399,8 +400,8 @@ function Rich({ id, value, onChange }: { id: string; value: unknown; onChange: (
             class="input"
             type="text"
             inputMode="url"
-            aria-label="Adresse du lien"
-            placeholder="https://… (vide pour retirer le lien)"
+            aria-label={t.linkAddress}
+            placeholder={t.linkHint}
             value={link.href}
             autoFocus
             onInput={(e) => setLink({ ...link, href: e.currentTarget.value })}
@@ -412,7 +413,7 @@ function Rich({ id, value, onChange }: { id: string; value: unknown; onChange: (
             }}
           />
           <button type="button" class="btn" onClick={applyLink}>
-            Appliquer
+            {t.apply}
           </button>
         </div>
       )}
@@ -434,7 +435,7 @@ function summarize(type: ItemType, item: Item): string {
       if (text) return text.length > 48 ? `${text.slice(0, 48)}…` : text
     }
     if (def.type === 'files' && Array.isArray(fieldValue) && fieldValue.length > 0) {
-      return fieldValue.length === 1 ? '1 fichier' : `${fieldValue.length} fichiers`
+      return t.fileCount(fieldValue.length)
     }
   }
   return ''
@@ -474,16 +475,16 @@ function ItemList({ def, value, path, context, onChange }: { def: ListDef; value
             return (
               <li class="item">
                 <button type="button" class="item-open" disabled={!type} onClick={() => context.onStep(`${path}.${item.id}`)}>
-                  {(def.types || !summary) && <span class="item-type">{type?.label ?? 'Type inconnu'}</span>}
+                  {(def.types || !summary) && <span class="item-type">{type?.label ?? t.unknownType}</span>}
                   {summary && <span class="item-summary">{summary}</span>}
                 </button>
-                <button type="button" class="icon" aria-label="Monter" disabled={index === 0} onClick={() => move(index, index - 1)}>
+                <button type="button" class="icon" aria-label={t.moveUp} disabled={index === 0} onClick={() => move(index, index - 1)}>
                   <Arrow up />
                 </button>
-                <button type="button" class="icon" aria-label="Descendre" disabled={index === items.length - 1} onClick={() => move(index, index + 1)}>
+                <button type="button" class="icon" aria-label={t.moveDown} disabled={index === items.length - 1} onClick={() => move(index, index + 1)}>
                   <Arrow />
                 </button>
-                <button type="button" class="icon is-danger" aria-label="Retirer" onClick={() => onChange(items.filter((other) => other !== item))}>
+                <button type="button" class="icon is-danger" aria-label={t.takeOut} onClick={() => onChange(items.filter((other) => other !== item))}>
                   <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
                     <path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
                   </svg>
@@ -495,7 +496,7 @@ function ItemList({ def, value, path, context, onChange }: { def: ListDef; value
       )}
       {def.types ? (
         <div class="add">
-          <span class="add-label">Ajouter</span>
+          <span class="add-label">{t.add}</span>
           {Object.entries(def.types).map(([key, type]) => (
             <button type="button" class="btn is-small" onClick={() => add(key)}>
               {type.label}
@@ -505,7 +506,7 @@ function ItemList({ def, value, path, context, onChange }: { def: ListDef; value
       ) : (
         <div class="add">
           <button type="button" class="btn is-small" onClick={() => add()}>
-            {def.addLabel ?? 'Ajouter'}
+            {def.addLabel ?? t.add}
           </button>
         </div>
       )}
@@ -526,7 +527,7 @@ function Thumb({ asset }: { asset: Asset }) {
   }
   return (
     <span class="thumb-file">
-      <span class="thumb-ext">{extOf(asset.name) || 'fichier'}</span>
+      <span class="thumb-ext">{extOf(asset.name) || t.file}</span>
     </span>
   )
 }
@@ -558,7 +559,7 @@ function useUploads(kinds: FileKind[] | undefined, onUploading: (delta: number) 
         key,
         name: file.name,
         progress: 0,
-        error: fits(file, kinds) ? undefined : `Ce champ attend ${describeKinds(kinds ?? [])}.`,
+        error: fits(file, kinds) ? undefined : t.expects(describeKinds(kinds ?? [], lang)),
       })),
     ])
     for (const { file, key } of jobs) {
@@ -570,7 +571,7 @@ function useUploads(kinds: FileKind[] | undefined, onUploading: (delta: number) 
           done.current(asset)
           setPending((list) => list.filter((p) => p.key !== key))
         } else {
-          patch(key, { error: `Ce champ attend ${describeKinds(kinds ?? [])}.` })
+          patch(key, { error: t.expects(describeKinds(kinds ?? [], lang)) })
         }
       } catch (err) {
         patch(key, { error: explain(err) })
@@ -597,13 +598,13 @@ function PendingList({ pending, dismiss }: { pending: Pending[]; dismiss: (key: 
             <>
               <span class="pending-error">{p.error}</span>
               <button type="button" class="link" onClick={() => dismiss(p.key)}>
-                Masquer
+                {t.hide}
               </button>
             </>
           ) : p.progress >= 1 ? (
-            <span class="pending-step">Préparation du fichier…</span>
+            <span class="pending-step">{t.preparing}</span>
           ) : (
-            <progress class="progress" max={1} value={p.progress} aria-label={`Envoi de ${p.name}`} />
+            <progress class="progress" max={1} value={p.progress} aria-label={t.sending(p.name)} />
           )}
         </li>
       ))}
@@ -645,7 +646,7 @@ function Picker(props: { id: string; accept?: string; multiple?: boolean; label:
       <button type="button" class="btn" onClick={() => input.current?.click()}>
         {props.label}
       </button>
-      <span class="drop-hint">ou déposez {props.multiple ? 'des fichiers' : 'un fichier'} ici</span>
+      <span class="drop-hint">{props.multiple ? t.dropFiles : t.dropFile}</span>
     </div>
   )
 }
@@ -670,14 +671,14 @@ function OneFile({ id, value, kinds, context, onChange }: FileProps) {
           </span>
           <span class="file-meta">
             <span class="file-name">{asset.name}</span>
-            <span class="file-size">{formatSize(asset.size)}</span>
+            <span class="file-size">{formatSize(asset.size, lang)}</span>
           </span>
           <button type="button" class="link is-danger" onClick={() => onChange(null)}>
-            Retirer
+            {t.takeOut}
           </button>
         </div>
       )}
-      <Picker id={id} accept={pickerFor(kinds)} label={asset ? 'Remplacer le fichier' : 'Choisir un fichier'} onFiles={(files) => uploads.add(files.slice(0, 1))} />
+      <Picker id={id} accept={pickerFor(kinds)} label={asset ? t.replaceFile : t.chooseFile} onFiles={(files) => uploads.add(files.slice(0, 1))} />
       <PendingList pending={uploads.pending} dismiss={uploads.dismiss} />
     </div>
   )
@@ -731,7 +732,7 @@ function ManyFiles({ id, value, kinds, context, onChange }: FileProps) {
                 type="button"
                 class="thumb"
                 aria-pressed={asset.id === selected}
-                aria-label={`${asset.name}, position ${index + 1} sur ${list.length}`}
+                aria-label={t.thumb(asset.name, index + 1, list.length)}
                 onClick={() => setSelected(asset.id === selected ? null : asset.id)}
               >
                 <Thumb asset={asset} />
@@ -745,10 +746,10 @@ function ManyFiles({ id, value, kinds, context, onChange }: FileProps) {
         <div class="detail">
           <div class="file-meta">
             <span class="file-name">{current.name}</span>
-            <span class="file-size">{formatSize(current.size)}</span>
+            <span class="file-size">{formatSize(current.size, lang)}</span>
           </div>
           <label class="label" for={`${id}-caption`}>
-            Légende
+            {t.caption}
           </label>
           <input
             id={`${id}-caption`}
@@ -762,10 +763,10 @@ function ManyFiles({ id, value, kinds, context, onChange }: FileProps) {
           />
           <div class="detail-actions">
             <button type="button" class="link" disabled={list[0] === current} onClick={() => move(current.id, list.indexOf(current) - 1)}>
-              Déplacer avant
+              {t.moveBefore}
             </button>
             <button type="button" class="link" disabled={list.at(-1) === current} onClick={() => move(current.id, list.indexOf(current) + 1)}>
-              Déplacer après
+              {t.moveAfter}
             </button>
             <button
               type="button"
@@ -775,13 +776,13 @@ function ManyFiles({ id, value, kinds, context, onChange }: FileProps) {
                 setSelected(null)
               }}
             >
-              Retirer
+              {t.takeOut}
             </button>
           </div>
         </div>
       )}
 
-      <Picker id={id} accept={pickerFor(kinds)} multiple label="Ajouter des fichiers" onFiles={uploads.add} />
+      <Picker id={id} accept={pickerFor(kinds)} multiple label={t.addFiles} onFiles={uploads.add} />
       <PendingList pending={uploads.pending} dismiss={uploads.dismiss} />
     </div>
   )
