@@ -55,7 +55,9 @@ function Outline(props: { el: HTMLElement; active?: boolean; label?: string; lin
   )
 }
 
-export function App({ host, config, initial, onQuit }: Props) {
+export function App({ host, config, initial: loaded, onQuit }: Props) {
+  // The stored content, fetched again after a save the page showed live (no reload to bring it).
+  const [initial, setInitial] = useState(loaded)
   const { schema } = config
   const [mode, setMode] = useState<Mode>(() => (sessionStorage.getItem('foliome:mode') === 'browse' ? 'browse' : 'edit'))
   const [hovered, setHovered] = useState<HTMLElement | null>(null)
@@ -93,6 +95,14 @@ export function App({ host, config, initial, onQuit }: Props) {
     sessionStorage.setItem('foliome:quiet', '1')
     if (goto && location.pathname.replace(/\/$/, '') !== goto.replace(/\/$/, '')) location.assign(goto)
     else location.reload()
+  }
+
+  /** A save the page already shows, a colour for instance: it stays as it is, the editor only learns the new content. */
+  const saved = (message: string, goto?: string, live = false) => {
+    if (!live || goto) return refresh(message, goto)
+    show(null)
+    setToast(message)
+    api.content().then(setInitial, () => refresh(message))
   }
 
   useEffect(() => {
@@ -238,7 +248,7 @@ export function App({ host, config, initial, onQuit }: Props) {
           }}
           onClose={() => show(null)}
           onOpen={show}
-          onSaved={refresh}
+          onSaved={saved}
         />
       )}
 

@@ -354,6 +354,90 @@ button:disabled {
   outline: none;
 }
 
+/* Colour: the system picker, its code, and the site's swatches. */
+.color-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.color-well {
+  flex: none;
+  width: 44px;
+  height: 38px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--paper);
+  cursor: pointer;
+}
+
+.color-well::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.color-well::-webkit-color-swatch {
+  border: none;
+  border-radius: 6px;
+}
+
+.color-well::-moz-color-swatch {
+  border: none;
+  border-radius: 6px;
+}
+
+.color-code {
+  font-variant-numeric: tabular-nums;
+  text-transform: lowercase;
+}
+
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.swatch {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid rgb(0 0 0 / 0.14);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.swatch[aria-pressed='true'] {
+  box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--ink);
+}
+
+.swatch:focus-visible {
+  outline: 2px solid var(--guide);
+  outline-offset: 2px;
+}
+
+/* Slider, with its value beside it. */
+.range {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.range input {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--ink);
+}
+
+.range-value {
+  flex: none;
+  min-width: 4.5em;
+  color: var(--muted);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
 .textarea {
   display: block;
   min-height: 96px;

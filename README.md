@@ -73,6 +73,8 @@ foliome({
 | `text`, `longtext` | Texte sur une ligne, sur plusieurs |
 | `richtext` | Texte avec gras, italique et liens |
 | `select` | Un choix parmi `options` |
+| `color` | Une couleur `#rrggbb` : le nuancier du système, le code, et des pastilles (`swatches`), par exemple la palette du site |
+| `range` | Un nombre au curseur, de `min` à `max` (`step`, `unit` facultatifs) |
 | `file`, `files` | Un fichier, plusieurs. `kinds: ['image']` restreint ce qui est accepté |
 | `group` | Des champs, en un exemplaire |
 | `list` | Des éléments ajoutables et réordonnables : `fields` pour une seule forme, `types` pour plusieurs |
@@ -100,6 +102,26 @@ Le rendu reste libre. Deux conventions aident l'éditeur à cohabiter avec les e
 - `html[data-foliome-mode="edit"]` est présent tant que le mode Modifier est actif.
 
 Un site WebGL qui garde ses images dans la page, invisibles sous le canvas, reste éditable au clic : l'éditeur cherche les zones à travers ce qui les recouvre.
+
+### 4. Montrer un réglage pendant qu'on le fait (facultatif)
+
+Pour une couleur ou une lumière, recharger la page à chaque essai ne permet pas de régler finement. Tant qu'un panneau est ouvert, l'éditeur annonce chaque valeur en cours sur `window`, avant tout enregistrement :
+
+```js
+addEventListener('foliome:preview', (e) => {
+  const { path, value } = e.detail // par exemple 'ambiance.blanc.sun', '#fff4e4'
+  if (!path.startsWith('ambiance.')) return
+  appliquer(path, value) // la scène change aussitôt
+  e.preventDefault() // « je l'ai montré »
+})
+```
+
+Le chemin est celui du champ dans le contenu (pour un groupe, sa valeur entière). Le site appelle `preventDefault()` sur ce qu'il a su appliquer :
+
+- **Enregistrement** : quand tous les champs modifiés ont été montrés ainsi, la page n'est pas rechargée. L'éditeur relit seulement le contenu.
+- **Abandon** : quand on ferme le panneau sans enregistrer, l'éditeur renvoie les valeurs d'origine des champs montrés.
+
+Ce que le site ignore se comporte comme avant : rechargement après l'enregistrement.
 
 ## Plusieurs langues
 
