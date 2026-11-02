@@ -14,10 +14,32 @@
       trial: 'Un essai : rien n’est conservé.',
       save: 'Enregistrer',
       saved: 'Enregistré',
+      create: 'Créer',
+      created: 'Créé',
+      remove: 'Supprimer',
+      removed: 'Supprimé',
       paper: 'Couleur du papier',
       pickColour: 'Choisir une couleur',
       colourCode: 'Code de la couleur',
       colour: 'Couleur',
+      works: 'Projets',
+      work: 'Projet',
+      yourWorks: 'Vos projets',
+      worksTag: 'Projets : il n’y en a pas encore',
+      newWork: 'Nouveau projet',
+      title: 'Titre',
+      year: 'Année',
+      image: 'Image',
+      pickImage: 'Choisir une image',
+      otherImage: 'Changer d’image',
+      imageStays: 'Elle reste sur votre appareil.',
+      editing: 'Édition de votre site',
+      undo: 'Annuler',
+      undoHint: 'Annuler la dernière modification enregistrée',
+      undone: 'Dernière modification annulée',
+      nothingToUndo: 'Rien à annuler',
+      publish: 'Mettre en ligne',
+      published: 'Sur votre site, vos visiteurs verraient maintenant cette version.',
       signIn: 'Accéder à mon site',
       enterCode: 'Saisissez le code d’accès que vous avez reçu.',
       accessCode: 'Code d’accès',
@@ -26,8 +48,8 @@
       down: 'Votre site ne répond pas pour le moment. Réessayez dans quelques minutes.',
       offline: 'Impossible de joindre Foliome. Vérifiez votre connexion et réessayez.',
       stories: [
-        { name: 'Atelier Morane', role: 'Architecture, Nantes', paper: 'Rose' },
-        { name: 'Maison Vesper', role: 'Design graphique, Lyon', paper: 'Outremer' },
+        { name: 'Atelier Morane', role: 'Architecture, Nantes', work: 'Halle aux grains', year: '2025', paper: 'Rose' },
+        { name: 'Maison Vesper', role: 'Design graphique, Lyon', work: 'Affiches du quai', year: '2024', paper: 'Outremer' },
       ],
     },
     en: {
@@ -38,10 +60,32 @@
       trial: 'Just a try: nothing is kept.',
       save: 'Save',
       saved: 'Saved',
+      create: 'Create',
+      created: 'Created',
+      remove: 'Delete',
+      removed: 'Deleted',
       paper: 'Paper colour',
       pickColour: 'Pick a colour',
       colourCode: 'Colour code',
       colour: 'Colour',
+      works: 'Projects',
+      work: 'Project',
+      yourWorks: 'Your projects',
+      worksTag: 'Projects: none yet',
+      newWork: 'New project',
+      title: 'Title',
+      year: 'Year',
+      image: 'Image',
+      pickImage: 'Pick an image',
+      otherImage: 'Change the image',
+      imageStays: 'It stays on your device.',
+      editing: 'Editing your site',
+      undo: 'Undo',
+      undoHint: 'Undo the last saved change',
+      undone: 'Last change undone',
+      nothingToUndo: 'Nothing to undo',
+      publish: 'Publish',
+      published: 'On your site, visitors would now see this version.',
       signIn: 'Go to my site',
       enterCode: 'Enter the access code you were given.',
       accessCode: 'Access code',
@@ -50,12 +94,15 @@
       down: 'Your site is not responding right now. Try again in a few minutes.',
       offline: 'Foliome cannot be reached. Check your connection and try again.',
       stories: [
-        { name: 'Atelier Morane', role: 'Architecture, Nantes', paper: 'Pink' },
-        { name: 'Maison Vesper', role: 'Graphic design, Lyon', paper: 'Ultramarine' },
+        { name: 'Atelier Morane', role: 'Architecture, Nantes', work: 'Grain hall', year: '2025', paper: 'Pink' },
+        { name: 'Maison Vesper', role: 'Graphic design, Lyon', work: 'Posters for the quay', year: '2024', paper: 'Ultramarine' },
       ],
     },
   }
   const t = WORDS[root.lang]
+
+  // While the page itself is being edited, the real editor has its own bar and the trial must keep out of its way.
+  const editing = document.body.hasAttribute('data-editing')
 
   // Each paper comes with the ink it is printed in.
   const PAPERS = [
@@ -68,7 +115,7 @@
   const INKS = ['#1a1fa8', '#ffdf3d', '#000000', '#ffffff']
 
   const START = { name: t.name, role: t.role, sheet: '#ffdf3d' }
-  const state = { ...START }
+  const state = { ...START, works: [] }
   const stillness = matchMedia('(prefers-reduced-motion: reduce)')
   let playing = false
 
@@ -122,24 +169,55 @@
     text.textContent = value.trim() || t.name
     fit()
   }
+  const showRole = (value) => {
+    $('role').textContent = value.trim() || t.role
+  }
   new ResizeObserver(fit).observe(line)
   document.fonts?.ready.then(fit)
   fit()
+
+  const el = (tag, props = {}, ...children) => {
+    const node = Object.assign(document.createElement(tag), props)
+    node.append(...children)
+    return node
+  }
+
+  const icon = (d) => {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    svg.setAttribute('viewBox', '0 0 16 16')
+    svg.setAttribute('width', '13')
+    svg.setAttribute('height', '13')
+    svg.setAttribute('aria-hidden', 'true')
+    svg.innerHTML = d
+    return svg
+  }
 
   // The panel
 
   let open = null
 
   const place = () => {
-    if (!open?.anchor || innerWidth <= 600) return
-    const box = open.anchor.getBoundingClientRect()
+    if (!open || innerWidth <= 600) return
     const { offsetWidth: width, offsetHeight: height } = panel
-    const fits = box.bottom + 12 + height < innerHeight
+    // Opened from the bar: the panel stands just above it.
+    if (!open.anchor) {
+      panel.style.left = `${(innerWidth - width) / 2}px`
+      panel.style.top = `${Math.max(12, innerHeight - height - 64)}px`
+      return
+    }
+    const box = open.anchor.getBoundingClientRect()
+    const fits = box.bottom + 12 + height < innerHeight - 56
     const top = fits ? box.bottom + 12 : Math.max(12, box.top - height - 12)
     const left = Math.min(Math.max(12, box.left), innerWidth - width - 12)
     panel.style.left = `${left}px`
     panel.style.top = `${Math.max(12, top)}px`
   }
+
+  // A panel that grows, with an image chosen or an error shown, stays on the screen.
+  new ResizeObserver(() => open && place()).observe(panel)
+
+  const remove = el('button', { type: 'button', className: 'link is-danger', textContent: t.remove, hidden: true })
+  $('panel-cancel').before(remove)
 
   const close = (restore = true) => {
     if (!open) return
@@ -158,6 +236,7 @@
     $('panel-context').textContent = config.context
     submit.textContent = config.action
     submit.disabled = false
+    remove.hidden = !config.remove
     body.replaceChildren(...config.fields())
     config.anchor?.classList.add('is-active')
     document.body.classList.remove('is-waiting')
@@ -168,12 +247,6 @@
     panel.querySelector('input')?.focus({ preventScroll: true })
   }
 
-  const el = (tag, props = {}, ...children) => {
-    const node = Object.assign(document.createElement(tag), props)
-    node.append(...children)
-    return node
-  }
-
   const field = (label, ...controls) => el('label', { className: 'field' }, el('span', { className: 'label', textContent: label }), ...controls)
 
   const toast = (message) => {
@@ -182,6 +255,15 @@
     box.hidden = false
     clearTimeout(toast.timer)
     toast.timer = setTimeout(() => (box.hidden = true), 2600)
+  }
+
+  // What was saved, so it can be undone: as in the editor, one step per save.
+
+  const history = []
+  const snapshot = () => ({ ...state, works: state.works.map((work) => ({ ...work })) })
+  const remember = () => {
+    history.push(snapshot())
+    undoButton.disabled = false
   }
 
   const textZone = (id, key, title, apply) => {
@@ -202,6 +284,7 @@
         },
         restore: () => apply(before),
         save: () => {
+          remember()
           state[key] = input.value.trim() || before
           apply(state[key])
           return t.saved
@@ -211,9 +294,7 @@
   }
 
   textZone('name', 'name', t.name, showName)
-  textZone('role', 'role', t.activity, (value) => {
-    $('role').textContent = value.trim() || t.role
-  })
+  textZone('role', 'role', t.activity, showRole)
 
   $('sheet').addEventListener('click', () => {
     const before = state.sheet
@@ -252,11 +333,94 @@
       },
       restore: () => showSheet(before),
       save: () => {
+        remember()
         state.sheet = current
         return t.saved
       },
     })
   })
+
+  // The visitor's projects: what the bar's "New project" adds to.
+
+  const works = $('works')
+  let nextWork = 1
+
+  const showWorks = () => {
+    if (editing) return
+    const list = state.works.map((work) => {
+      const cover = el('span', { className: 'work-cover' })
+      if (work.image) cover.append(el('img', { src: work.image, alt: '' }))
+      else cover.textContent = work.title.charAt(0)
+      const zone = el(
+        'button',
+        { type: 'button', className: 'zone work' },
+        cover,
+        el('span', { className: 'work-title', textContent: work.title }),
+        el('span', { className: 'work-year', textContent: work.year }),
+      )
+      zone.dataset.tag = t.work
+      zone.dataset.work = work.id
+      zone.addEventListener('click', () => openWork(work.id))
+      return el('li', {}, zone)
+    })
+    if (list.length) return works.replaceChildren(el('ol', { className: 'works-list', ariaLabel: t.works }, ...list))
+    const empty = el('button', { type: 'button', className: 'zone works-empty', textContent: t.yourWorks })
+    empty.dataset.tag = t.worksTag
+    empty.addEventListener('click', () => openWork(null, empty))
+    works.replaceChildren(empty)
+  }
+
+  /** A new project when `id` is null, from the bar or the empty list; otherwise the project shown with that id. */
+  const openWork = (id, trigger = addButton) => {
+    const work = state.works.find((one) => one.id === id)
+    const zone = work && works.querySelector(`[data-work="${work.id}"]`)
+    let title
+    let year
+    let image = work?.image ?? null
+    show({
+      anchor: zone ?? (works.contains(trigger) ? trigger : null),
+      trigger: zone ?? trigger,
+      title: work ? work.title : t.newWork,
+      context: t.trial,
+      action: work ? t.save : t.create,
+      fields: () => {
+        title = el('input', { className: 'input', value: work?.title ?? '', maxLength: 60, autocomplete: 'off', required: true })
+        year = el('input', { className: 'input', value: work?.year ?? '', maxLength: 4, inputMode: 'numeric', autocomplete: 'off' })
+        const preview = el('img', { className: 'file-preview', alt: '', hidden: !image, src: image ?? '' })
+        const name = el('span', { textContent: image ? t.otherImage : t.pickImage })
+        const picker = el('input', { type: 'file', accept: 'image/*', className: 'file-input' })
+        picker.addEventListener('change', () => {
+          const file = picker.files[0]
+          if (!file) return
+          image = URL.createObjectURL(file)
+          preview.src = image
+          preview.hidden = false
+          name.textContent = t.otherImage
+        })
+        return [
+          field(t.title, title),
+          field(t.year, year),
+          el('div', { className: 'field' }, el('span', { className: 'label', textContent: t.image }), preview, el('label', { className: 'btn file-pick' }, name, picker), el('span', { className: 'hint', textContent: t.imageStays })),
+        ]
+      },
+      remove: work
+        ? () => {
+            remember()
+            state.works = state.works.filter((one) => one.id !== work.id)
+            showWorks()
+            return t.removed
+          }
+        : null,
+      save: () => {
+        remember()
+        const values = { title: title.value.trim(), year: year.value.trim(), image }
+        if (work) Object.assign(state.works.find((one) => one.id === work.id), values)
+        else state.works.push({ id: String(nextWork++), ...values })
+        showWorks()
+        return work ? t.saved : t.created
+      },
+    })
+  }
 
   // Signing in: the access code leads to the artist's own site.
   const signIn = (trigger) => {
@@ -301,9 +465,44 @@
   $('signin').addEventListener('click', () => signIn($('signin')))
   $('signin-foot').addEventListener('click', () => signIn($('signin-foot')))
 
+  // A light copy of the editor's bar: what the artist finds at the bottom of their own site.
+
+  const addButton = el('button', { type: 'button', className: 'bar-btn', onclick: () => openWork(null) }, icon('<path d="M8 2.5v11M2.5 8h11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>'), t.newWork)
+  const undoButton = el(
+    'button',
+    { type: 'button', className: 'bar-btn', title: t.undoHint, disabled: true, onclick: () => undo() },
+    icon('<path d="M3 6.5h6.2a3.8 3.8 0 0 1 0 7.6H6M3 6.5l3-3M3 6.5l3 3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>'),
+    t.undo,
+  )
+  const publishButton = el('button', { type: 'button', className: 'bar-btn is-strong', textContent: t.publish, onclick: () => toast(t.published) })
+  if (!editing) {
+    document.body.append(el('div', { className: 'bar', role: 'toolbar', ariaLabel: t.editing }, addButton, undoButton, publishButton))
+    document.body.classList.add('has-bar')
+  }
+  showWorks()
+
+  const undo = () => {
+    const before = history.pop()
+    if (!before) return toast(t.nothingToUndo)
+    close(false)
+    Object.assign(state, before)
+    showName(state.name)
+    showRole(state.role)
+    showSheet(state.sheet)
+    showWorks()
+    undoButton.disabled = !history.length
+    toast(t.undone)
+  }
+
   $('panel-form').addEventListener('submit', async (event) => {
     event.preventDefault()
     const message = await open?.save()
+    if (!message) return
+    close(false)
+    toast(message)
+  })
+  remove.addEventListener('click', () => {
+    const message = open?.remove?.()
     if (!message) return
     close(false)
     toast(message)
@@ -349,8 +548,7 @@
     await sleep(380)
   }
 
-  const type = async (value) => {
-    const input = panel.querySelector('input')
+  const type = async (value, input = panel.querySelector('input')) => {
     const change = (next) => {
       input.value = next
       input.dispatchEvent(new Event('input'))
@@ -375,9 +573,12 @@
   }
 
   const backToStart = () => {
-    Object.assign(state, START)
+    Object.assign(state, START, { works: [] })
+    history.length = 0
+    undoButton.disabled = true
     showName(START.name)
-    $('role').textContent = START.role
+    showRole(START.role)
+    showWorks()
     ghost.hidden = true
     document.querySelectorAll('.is-reached').forEach((zone) => zone.classList.remove('is-reached'))
     document.body.classList.add('is-waiting')
@@ -402,6 +603,13 @@
       for (const story of t.stories) {
         await edit($('name'), story.name)
         await edit($('role'), story.role)
+        await reach(addButton)
+        await press(addButton)
+        const [title, year] = panel.querySelectorAll('input')
+        await type(story.work, title)
+        await type(story.year, year)
+        await reach(submit)
+        await press(submit)
         await reach($('sheet'))
         await press($('sheet'))
         const swatch = panel.querySelector(`.swatch[title="${story.paper}"]`)
@@ -423,6 +631,5 @@
   for (const event of ['pointerdown', 'keydown', 'wheel', 'touchstart']) {
     addEventListener(event, stop, { capture: true, passive: true })
   }
-  // While the page itself is being edited, the hand would only get in the way.
-  if (!stillness.matches && !document.body.hasAttribute('data-editing')) play()
+  if (!stillness.matches && !editing) play()
 })()
