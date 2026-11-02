@@ -22,6 +22,13 @@ const fr = {
   publish: 'Mettre en ligne',
   quit: 'Quitter',
 
+  // Closing an editing session nobody uses
+  closingSoon: (minutes: number) => `Sans activité, l’édition se ferme dans ${minutes === 1 ? 'une minute' : `${minutes} minutes`}. Ce qui est enregistré est conservé.`,
+  closingUnsaved: (minutes: number) => `Des modifications ne sont pas enregistrées. Enregistrez-les : sans activité, l’édition se ferme dans ${minutes === 1 ? 'une minute' : `${minutes} minutes`}.`,
+  stay: 'Continuer',
+  closed: 'L’édition s’est fermée faute d’activité. Ce qui était enregistré est conservé.',
+  reopen: 'Rouvrir',
+
   // Signing in
   badCode: 'Ce code n’est pas le bon. Vérifiez-le et réessayez.',
   tooMany: 'Trop d’essais. Patientez cinq minutes avant de réessayer.',
@@ -113,6 +120,12 @@ const en: typeof fr = {
   publishing: 'Publishing…',
   publish: 'Publish',
   quit: 'Quit',
+
+  closingSoon: (minutes) => `With nothing happening, editing closes in ${minutes === 1 ? 'one minute' : `${minutes} minutes`}. What is saved is kept.`,
+  closingUnsaved: (minutes) => `Some changes are not saved. Save them: with nothing happening, editing closes in ${minutes === 1 ? 'one minute' : `${minutes} minutes`}.`,
+  stay: 'Keep editing',
+  closed: 'Editing closed after a while with nothing happening. What was saved is kept.',
+  reopen: 'Open again',
 
   badCode: 'That code is not right. Check it and try again.',
   tooMany: 'Too many tries. Wait five minutes before trying again.',

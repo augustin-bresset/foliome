@@ -210,6 +210,38 @@ button:disabled {
   animation: appear 0.16s ease-out;
 }
 
+/* The warning before a session closes for want of activity: at the top, away from the panel and the bar. */
+.notice {
+  position: fixed;
+  z-index: 1;
+  left: 50%;
+  top: 16px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  padding: 10px 10px 10px 16px;
+  border-radius: 14px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow:
+    0 0 0 2px var(--guide),
+    0 12px 30px -10px rgb(0 0 0 / 0.45);
+  pointer-events: auto;
+  animation: appear 0.16s ease-out;
+}
+
+.notice p {
+  max-width: 46ch;
+  margin: 0;
+}
+
+.notice .btn {
+  flex: none;
+}
+
 /* Panel */
 
 .scrim {

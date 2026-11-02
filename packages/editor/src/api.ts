@@ -40,6 +40,9 @@ export interface SiteConfig {
   converts: { heic: boolean; tiff: boolean }
 }
 
+/** What the server has to say about the session: that it is about to close for want of activity, or has closed. */
+export type Notice = { kind: 'closing'; in: number; unsaved: boolean } | { kind: 'closed'; home?: string } | null
+
 export const api = {
   session: () => call<{ editor: boolean }>('GET', '/session'),
   login: (code: string) => call<{ ok: true }>('POST', '/login', { code }),
@@ -49,6 +52,7 @@ export const api = {
   ops: (ops: Op[]) => call<{ ok: true }>('POST', '/ops', { ops }),
   undo: () => call<{ ok: boolean }>('POST', '/undo', {}),
   publish: () => call<{ ok: boolean; log: string }>('POST', '/publish', {}),
+  presence: (state: { dirty: boolean; active: boolean }) => call<{ notice: Notice }>('POST', '/presence', state),
 }
 
 /** What to tell the artist when a request fails. */

@@ -130,6 +130,8 @@ export default function foliome(options: FoliomeOptions): AstroIntegration {
           publish,
           beforePublish: history?.flush,
           editorFile: path.join(path.dirname(editorPackage), 'dist', 'editor.js'),
+          // Set on a server where a door wakes and closes the editing servers.
+          doorKey: process.env.FOLIOME_DOOR_KEY || undefined,
           // Pages are rendered from the content file, which Vite does not know
           // they depend on. Astro also keeps the list of dynamic routes
           // (getStaticPaths) for as long as a page module lives. Dropping the

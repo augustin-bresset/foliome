@@ -1,6 +1,6 @@
 import { type Doc, resolvePath, type Schema } from '@foliome/core'
 import { useEffect, useRef, useState } from 'preact/hooks'
-import { api, explain, type SiteConfig } from './api.ts'
+import { api, explain, type Notice, type SiteConfig } from './api.ts'
 import { t } from './i18n.ts'
 import { type Open, Panel } from './Panel.tsx'
 import { useFollow, zoneAt } from './zones.ts'
@@ -69,6 +69,7 @@ export function App({ host, config, initial: loaded, onQuit }: Props) {
   const [toast, setToast] = useState<string | null>(() => take('foliome:toast'))
   const [busy, setBusy] = useState<'undo' | 'publish' | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
+  const [notice, setNotice] = useState<Notice>(null)
 
   // Event handlers below are registered once; they read the latest state through this ref.
   const dirty = useRef(false)
@@ -155,6 +156,38 @@ export function App({ host, config, initial: loaded, onQuit }: Props) {
       window.removeEventListener('click', onClick, true)
       window.removeEventListener('keydown', onKey)
       document.removeEventListener('astro:before-swap', onSwap)
+    }
+  }, [])
+
+  // A sign of life every half minute, saying whether the artist did anything and whether a panel holds unsaved
+  // changes. On a shared server it keeps the session open while it is used, and brings back the warning before it
+  // closes.
+  const beat = useRef<(active: boolean) => void>(() => {})
+  useEffect(() => {
+    let active = false
+    let warned = false
+    const mark = () => {
+      active = true
+    }
+    const events = ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const
+    for (const name of events) window.addEventListener(name, mark, { capture: true, passive: true })
+    const send = (now = active) => {
+      active = false
+      api.presence({ dirty: dirty.current, active: now }).then(
+        ({ notice }) => {
+          warned = notice?.kind === 'closing'
+          setNotice(notice)
+        },
+        // Warned a moment ago and now unanswered: the session has closed.
+        () => warned && setNotice({ kind: 'closed' }),
+      )
+    }
+    beat.current = send
+    send()
+    const timer = setInterval(send, 30_000)
+    return () => {
+      clearInterval(timer)
+      for (const name of events) window.removeEventListener(name, mark, { capture: true })
     }
   }, [])
 
@@ -324,6 +357,32 @@ export function App({ host, config, initial: loaded, onQuit }: Props) {
           {t.quit}
         </button>
       </div>
+
+      {notice && (
+        <div class="notice" role="alert">
+          <p>
+            {notice.kind === 'closed'
+              ? t.closed
+              : (notice.unsaved ? t.closingUnsaved : t.closingSoon)(Math.max(1, Math.ceil(notice.in / 60_000)))}
+          </p>
+          {notice.kind === 'closing' ? (
+            <button
+              type="button"
+              class="btn"
+              onClick={() => {
+                setNotice(null)
+                beat.current(true)
+              }}
+            >
+              {t.stay}
+            </button>
+          ) : (
+            <button type="button" class="btn" onClick={() => (notice.home ? location.assign(notice.home) : location.reload())}>
+              {t.reopen}
+            </button>
+          )}
+        </div>
+      )}
 
       {toast && !menu && (
         <div class="toast" role="status">

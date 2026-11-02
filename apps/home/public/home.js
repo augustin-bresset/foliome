@@ -46,6 +46,8 @@
       badCode: 'Ce code n’est pas le bon. Vérifiez-le et réessayez.',
       tooMany: 'Trop d’essais. Patientez cinq minutes avant de réessayer.',
       down: 'Votre site ne répond pas pour le moment. Réessayez dans quelques minutes.',
+      busy: 'Le serveur est très demandé en ce moment. Réessayez dans quelques minutes.',
+      opening: 'Ouverture de votre site…',
       offline: 'Impossible de joindre Foliome. Vérifiez votre connexion et réessayez.',
       stories: [
         { name: 'Atelier Morane', role: 'Architecture, Nantes', work: 'Halle aux grains', year: '2025', paper: 'Rose' },
@@ -92,6 +94,8 @@
       badCode: 'That code is not right. Check it and try again.',
       tooMany: 'Too many tries. Wait five minutes before trying again.',
       down: 'Your site is not responding right now. Try again in a few minutes.',
+      busy: 'The server is very busy right now. Try again in a few minutes.',
+      opening: 'Opening your site…',
       offline: 'Foliome cannot be reached. Check your connection and try again.',
       stories: [
         { name: 'Atelier Morane', role: 'Architecture, Nantes', work: 'Grain hall', year: '2025', paper: 'Pink' },
@@ -445,6 +449,8 @@
           return false
         }
         submit.disabled = true
+        // A site that was asleep takes a few seconds to wake.
+        const slow = setTimeout(() => (submit.textContent = t.opening), 1200)
         try {
           const res = await fetch('/entrer', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code: input.value }) })
           if (res.ok) {
@@ -453,10 +459,13 @@
           }
           if (res.status === 401) return fail(t.badCode)
           if (res.status === 429) return fail(t.tooMany)
+          if (res.status === 503 && (await res.json().catch(() => ({}))).error === 'busy') return fail(t.busy)
           return fail(t.down)
         } catch {
           return fail(t.offline)
         } finally {
+          clearTimeout(slow)
+          submit.textContent = t.signIn
           submit.disabled = false
         }
       },
@@ -631,5 +640,7 @@
   for (const event of ['pointerdown', 'keydown', 'wheel', 'touchstart']) {
     addEventListener(event, stop, { capture: true, passive: true })
   }
-  if (!stillness.matches && !editing) play()
+  // Sent here by a site whose editing had gone to sleep: straight to the code.
+  if (location.hash === '#entrer') signIn($('signin'))
+  else if (!stillness.matches && !editing) play()
 })()

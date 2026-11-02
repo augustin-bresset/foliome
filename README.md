@@ -182,6 +182,27 @@ Rien de tout cela ne gêne l'artiste : en cas d'échec, l'enregistrement et la m
 
 Une fois le site sur un serveur, `content/` lui appartient : le modifier à la main ailleurs mène à un conflit, qui bloque l'envoi jusqu'à ce qu'il soit résolu. Le travail de l'artiste, lui, reste enregistré sur le serveur.
 
+## Plusieurs sites sur un serveur : la porte
+
+Un serveur d'édition prend 400 à 550 Mo. Sur un serveur partagé, aucun ne tourne en permanence : `packages/door`, seul toujours en marche, les réveille et les endort.
+
+- **Entrer** : l'artiste donne son code sur la page d'accueil. La porte le compare aux codes des sites, lus dans leur `.foliome/local.json`, et ne réveille que le site concerné. Un mauvais code ne réveille rien ; les essais sont comptés par visiteur et pour tous.
+- **Combien** : au plus trois serveurs à la fois. Pour en réveiller un quatrième, la porte endort un site que personne n'utilise ; si tous servent, elle répond que le serveur est occupé.
+- **Fermer** : sans activité pendant 25 minutes, l'éditeur prévient l'artiste ; à 30 minutes le site s'endort, et son arrêt enregistre son travail dans git. Avec des modifications pas encore enregistrées, il attend jusqu'à une heure. Sans aucun éditeur ouvert, il s'endort après 10 minutes. Un envoi de fichier ou une mise en ligne en cours n'est jamais coupé.
+- **Parler aux sites** : la porte et les sites partagent la clé `FOLIOME_DOOR_KEY`. Sans elle, `/_foliome/door` n'existe pas.
+
+La porte lit sa configuration dans le fichier nommé par `FOLIOME_DOOR_CONFIG` :
+
+```json
+{
+  "home": "https://foliome.eu",
+  "sites": [{ "name": "tom.foliome.eu", "port": 4331, "root": "/srv/foliome/tom-conan", "unit": "foliome-site@tom-conan.service" }],
+  "limits": { "awake": 3 }
+}
+```
+
+Elle démarre et arrête les services par `systemctl`, sans mot de passe : une règle polkit doit le lui permettre pour ces services-là seulement.
+
 ## Organisation
 
 | Dossier | Rôle |
@@ -190,6 +211,7 @@ Une fois le site sur un serveur, `content/` lui appartient : le modifier à la m
 | `packages/server` | L'API d'édition, indépendante du stockage ; stockage sur disque ; préparation des fichiers |
 | `packages/editor` | L'éditeur affiché par-dessus le site |
 | `packages/astro` | L'intégration Astro : édition locale, code d'accès, lecture du contenu, enregistrement dans git |
+| `packages/door` | La porte d'un serveur partagé : le code mène au bon site, qu'elle réveille et endort |
 | `apps/demo` | Le site de référence |
 | `apps/home` | foliome.eu, modifié avec Foliome comme les sites qu'il présente (`npm run home`) |
 | `tests/e2e.mjs` | La séance d'édition rejouée dans un navigateur |

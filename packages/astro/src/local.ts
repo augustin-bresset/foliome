@@ -38,7 +38,27 @@ export interface LocalOptions {
   beforePublish?: () => Promise<unknown>
   /** Called after every stored change. */
   onChange: () => void
+  /**
+   * Shared with the door that wakes and closes the editing servers of a machine: it asks with this key how this one is
+   * used, and leaves notices for the artist. Unset, nobody can ask.
+   */
+  doorKey?: string
 }
+
+/** How this editing server is being used, as the door sees it. */
+export interface Presence {
+  /** Milliseconds since the artist last did anything. */
+  idle: number
+  /** An open panel holds changes the artist has not saved. */
+  dirty: boolean
+  /** Editors open on this server, judged by their recent signs of life. */
+  editors: number
+  /** A request is under way, an upload or a publish: closing now would cut it. */
+  busy: boolean
+}
+
+/** What the door has to say to the artist, through the editor. */
+export type Notice = { kind: 'closing'; at: number; unsaved: boolean } | { kind: 'closed'; home?: string }
 
 interface State {
   code: string
@@ -63,6 +83,8 @@ const TRIES = 8
 const TRIES_IN_ALL = 200
 const EVERYBODY = '*'
 const KNOWN_VISITORS = 50
+/** An editor gives a sign of life every thirty seconds: one missed is allowed. */
+const ALIVE = 75_000
 
 // No I, L, O, 0 or 1: the code is read aloud and typed by hand.
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
@@ -164,6 +186,34 @@ export async function createLocal(options: LocalOptions) {
     const token = parse(req.headers.cookie ?? '', COOKIE)[COOKIE]
     if (token && (state.sessions[sha256(token)] ?? 0) > Date.now()) return true
     return isThisMachine(req)
+  }
+
+  // How the server is used, for the door. Kept in memory: a restart is a fresh start.
+  let lastActivity = Date.now()
+  let inFlight = 0
+  let notice: Notice | null = null
+  /** Each open editor's last sign of life, by session, and whether it held unsaved changes. */
+  const editors = new Map<string, { at: number; dirty: boolean }>()
+  /** The artist did something: whatever the door was about to say about their absence no longer holds. */
+  const touch = () => {
+    lastActivity = Date.now()
+    if (notice?.kind === 'closing') notice = null
+  }
+  const presence = (): Presence => {
+    const now = Date.now()
+    for (const [key, beat] of editors) if (now - beat.at > ALIVE) editors.delete(key)
+    return {
+      idle: now - lastActivity,
+      dirty: [...editors.values()].some((beat) => beat.dirty),
+      editors: editors.size,
+      busy: inFlight > 0 || publishing,
+    }
+  }
+  const fromDoor = (req: IncomingMessage) => {
+    if (!options.doorKey) return false
+    const given = Buffer.from(String(req.headers['x-foliome-door'] ?? ''))
+    const expected = Buffer.from(options.doorKey)
+    return given.length === expected.length && timingSafeEqual(given, expected)
   }
 
   const guard: MiddlewareHandler<Env> = async (c, next) => {
@@ -269,6 +319,26 @@ export async function createLocal(options: LocalOptions) {
       await save()
     }
     deleteCookie(c, COOKIE, { path: '/' })
+    return c.json({ ok: true })
+  })
+
+  // Each open editor's sign of life, which tells whether the artist did anything since the last one. The answer
+  // carries what the door has to say: the time left is counted here, the artist's clock may be wrong.
+  app.post('/presence', guard, async (c) => {
+    const body = (await c.req.json().catch(() => null)) as { dirty?: unknown; active?: unknown } | null
+    const token = getCookie(c, COOKIE)
+    editors.set(token ? sha256(token) : 'this machine', { at: Date.now(), dirty: body?.dirty === true })
+    if (body?.active === true) touch()
+    if (notice?.kind === 'closing') return c.json({ notice: { kind: 'closing', in: Math.max(0, notice.at - Date.now()), unsaved: notice.unsaved } })
+    return c.json({ notice })
+  })
+
+  // The door alone, with its key. To anyone else these do not exist.
+  app.get('/door', (c) => (fromDoor(c.env.incoming) ? c.json(presence()) : c.json({ error: 'not_found' }, 404)))
+  app.post('/door', async (c) => {
+    if (!fromDoor(c.env.incoming)) return c.json({ error: 'not_found' }, 404)
+    const body = (await c.req.json().catch(() => null)) as { notice?: Notice | null } | null
+    notice = body?.notice ?? null
     return c.json({ ok: true })
   })
 
@@ -387,8 +457,20 @@ export async function createLocal(options: LocalOptions) {
       next()
     },
     middleware(req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) {
-      if (isApi(req.url ?? '')) return void api(req, res)
-      media(req, res, next).catch(next)
+      const url = req.url ?? ''
+      // Whatever the artist asks for is activity, the door's questions and the editor's signs of life excepted. A
+      // request is under way until its answer has gone: a long upload ends with activity too.
+      const counts = isEditor(req) && !/^\/_foliome\/(presence|door)([?/]|$)/.test(url)
+      if (counts) touch()
+      if (!isApi(url)) return void media(req, res, next).catch(next)
+      if (counts) {
+        inFlight++
+        res.once('close', () => {
+          inFlight--
+          touch()
+        })
+      }
+      api(req, res)
     },
   }
 }
