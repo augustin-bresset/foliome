@@ -1,3 +1,11 @@
+---
+import { edit, isEditing } from '@foliome/astro/content'
+import Made from '../../components/Made.astro'
+import { load } from '../../content.ts'
+
+const { sites, email } = await load('en')
+---
+
 <!doctype html>
 <html lang="en">
 <head>
@@ -12,7 +20,7 @@
 <link rel="preload" href="/fonts/syne-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/home.css">
 </head>
-<body class="is-waiting">
+<body class="is-waiting" data-editing={isEditing() ? '' : undefined}>
 
 <header class="top">
   <a class="brand" href="/en/">Foliome</a>
@@ -74,24 +82,13 @@
 
   <section class="sheet-of-paper fourth">
     <h2>Sites made so far.</h2>
-    <ul class="made">
-      <li>
-        <span class="made-name">Tom Conan</span>
-        <span>Art director, Paris</span>
-        <span>Online soon</span>
-      </li>
-      <li>
-        <span class="made-name">Ulysse Gohin</span>
-        <span>Sound, visual and set design artist, Strasbourg</span>
-        <span>Online soon</span>
-      </li>
-    </ul>
+    <Made locale="en" sites={sites} />
   </section>
 
   <section class="sheet-of-paper fifth">
     <h2>A site in mind? <span class="whole">Write to me.</span></h2>
     <p>I design and code portfolio sites for artists, architects and designers. Foliome is the tool I built so that you can then edit them yourself.</p>
-    <a class="mail" href="mailto:augustin_650@hotmail.fr">augustin_650@hotmail.fr</a>
+    <a class="mail" href={`mailto:${email}`} {...edit('contact.email')}>{email}</a>
     <p>Foliome’s code is public: <a href="https://github.com/augustin-bresset/foliome">see the repository on GitHub</a>.</p>
     <footer class="foot">
       <a class="brand" href="/en/">Foliome</a>
@@ -126,6 +123,6 @@
   <svg viewBox="0 0 24 24"><path d="M4 2.5v17.2l4.7-4.5 3 6.9 3.3-1.5-3-6.7 6.5-.4z" fill="#fff" stroke="#17171c" stroke-width="1.6" stroke-linejoin="round"/></svg>
 </div>
 
-<script src="/home.js"></script>
+<script is:inline src="/home.js"></script>
 </body>
 </html>

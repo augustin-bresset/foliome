@@ -1,3 +1,11 @@
+---
+import { edit, isEditing } from '@foliome/astro/content'
+import Made from '../components/Made.astro'
+import { load } from '../content.ts'
+
+const { sites, email } = await load('fr')
+---
+
 <!doctype html>
 <html lang="fr">
 <head>
@@ -12,7 +20,7 @@
 <link rel="preload" href="/fonts/syne-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/home.css">
 </head>
-<body class="is-waiting">
+<body class="is-waiting" data-editing={isEditing() ? '' : undefined}>
 
 <header class="top">
   <a class="brand" href="/">Foliome</a>
@@ -72,27 +80,15 @@
     </dl>
   </section>
 
-  <!-- Un site en ligne : son nom devient <a class="made-name" href="https://…">Nom</a> et la ligne « Bientôt en ligne » disparaît. Même chose dans en/index.html. -->
   <section class="sheet-of-paper fourth">
     <h2>Les sites réalisés jusqu’ici.</h2>
-    <ul class="made">
-      <li>
-        <span class="made-name">Tom Conan</span>
-        <span>Directeur artistique, Paris</span>
-        <span>Bientôt en ligne</span>
-      </li>
-      <li>
-        <span class="made-name">Ulysse Gohin</span>
-        <span>Artiste sonore, plasticien et scénographe, Strasbourg</span>
-        <span>Bientôt en ligne</span>
-      </li>
-    </ul>
+    <Made locale="fr" sites={sites} />
   </section>
 
   <section class="sheet-of-paper fifth">
     <h2>Un projet de site&nbsp;? <span class="whole">Écrivez-moi.</span></h2>
     <p>Je dessine et je code des sites de portfolio pour des artistes, des architectes et des designers. Foliome est l’outil que j’ai construit pour que vous puissiez ensuite les modifier vous-même.</p>
-    <a class="mail" href="mailto:augustin_650@hotmail.fr">augustin_650@hotmail.fr</a>
+    <a class="mail" href={`mailto:${email}`} {...edit('contact.email')}>{email}</a>
     <p>Le code de Foliome est public&nbsp;: <a href="https://github.com/augustin-bresset/foliome">voir le dépôt sur GitHub</a>.</p>
     <footer class="foot">
       <a class="brand" href="/">Foliome</a>
@@ -127,6 +123,6 @@
   <svg viewBox="0 0 24 24"><path d="M4 2.5v17.2l4.7-4.5 3 6.9 3.3-1.5-3-6.7 6.5-.4z" fill="#fff" stroke="#17171c" stroke-width="1.6" stroke-linejoin="round"/></svg>
 </div>
 
-<script src="/home.js"></script>
+<script is:inline src="/home.js"></script>
 </body>
 </html>

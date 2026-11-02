@@ -1,0 +1,24 @@
+{
+  "sites": [
+    {
+      "id": "tom-conan",
+      "name": "Tom Conan",
+      "role": { "$t": { "fr": "Directeur artistique, Paris", "en": "Art director, Paris" } },
+      "url": ""
+    },
+    {
+      "id": "ulysse-gohin",
+      "name": "Ulysse Gohin",
+      "role": {
+        "$t": {
+          "fr": "Artiste sonore, plasticien et scénographe, Strasbourg",
+          "en": "Sound, visual and set design artist, Strasbourg"
+        }
+      },
+      "url": ""
+    }
+  ],
+  "contact": {
+    "email": "augustin_650@hotmail.fr"
+  }
+}

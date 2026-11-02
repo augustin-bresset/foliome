@@ -193,7 +193,7 @@
         anchor: zone,
         trigger: zone,
         title,
-        context: 'Un essai : rien n’est conservé.',
+        context: t.trial,
         action: t.save,
         fields: () => {
           input = el('input', { className: 'input', value: before, maxLength: 60, autocomplete: 'off' })
@@ -222,7 +222,7 @@
       anchor: $('sheet'),
       trigger: $('sheet'),
       title: t.paper,
-      context: 'Un essai : rien n’est conservé.',
+      context: t.trial,
       action: t.save,
       fields: () => {
         const well = el('input', { className: 'color-well', type: 'color', value: before, ariaLabel: t.pickColour })
@@ -423,5 +423,6 @@
   for (const event of ['pointerdown', 'keydown', 'wheel', 'touchstart']) {
     addEventListener(event, stop, { capture: true, passive: true })
   }
-  if (!stillness.matches) play()
+  // While the page itself is being edited, the hand would only get in the way.
+  if (!stillness.matches && !document.body.hasAttribute('data-editing')) play()
 })()

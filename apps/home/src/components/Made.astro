@@ -1,0 +1,32 @@
+---
+import { edit } from '@foliome/astro/content'
+import type { Locale, Made } from '../content.ts'
+
+interface Props {
+  locale: Locale
+  sites: Made[]
+}
+
+const { locale, sites } = Astro.props
+const soon = locale === 'fr' ? 'Bientôt en ligne' : 'Online soon'
+---
+
+<ul class="made">
+  {
+    sites.map((site) => (
+      <li {...edit(`sites.${site.id}`)}>
+        {site.url ? (
+          <a class="made-name" href={site.url} {...edit(`sites.${site.id}.name`)}>
+            {site.name}
+          </a>
+        ) : (
+          <span class="made-name" {...edit(`sites.${site.id}.name`)}>
+            {site.name}
+          </span>
+        )}
+        <span {...edit(`sites.${site.id}.role`)}>{site.role}</span>
+        {!site.url && <span>{soon}</span>}
+      </li>
+    ))
+  }
+</ul>

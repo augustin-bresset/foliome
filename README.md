@@ -191,6 +191,7 @@ Une fois le site sur un serveur, `content/` lui appartient : le modifier à la m
 | `packages/editor` | L'éditeur affiché par-dessus le site |
 | `packages/astro` | L'intégration Astro : édition locale, code d'accès, lecture du contenu, enregistrement dans git |
 | `apps/demo` | Le site de référence |
+| `apps/home` | foliome.eu, modifié avec Foliome comme les sites qu'il présente (`npm run home`) |
 | `tests/e2e.mjs` | La séance d'édition rejouée dans un navigateur |
 
 ## Pas encore fait

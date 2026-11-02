@@ -1,0 +1,17 @@
+{
+  "name": "@foliome/home",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "edit": "astro dev --host",
+    "build": "astro build",
+    "preview": "astro preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@foliome/astro": "*",
+    "astro": "^7.3.8"
+  }
+}
