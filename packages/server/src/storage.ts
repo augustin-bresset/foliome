@@ -1,6 +1,13 @@
 import type { Asset, Doc } from '@foliome/core'
 
-export class TooLargeError extends Error {}
+export class TooLargeError extends Error {
+  /** Set when what was exceeded is the total allowed for the session, not the size of one file. */
+  readonly budget?: number
+  constructor(budget?: number) {
+    super(budget ? 'over the media budget' : 'file too large')
+    this.budget = budget
+  }
+}
 
 export interface StoredFile {
   /** URL path the file is served from. */

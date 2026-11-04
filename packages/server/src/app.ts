@@ -46,7 +46,7 @@ export function createApp({ storage, guard, maxUploadBytes = 2 * 1024 ** 3 }: Ap
     try {
       stored = await storage.putFile(id, safeName, body, maxUploadBytes)
     } catch (err) {
-      if (err instanceof TooLargeError) return c.json({ error: 'too_large', maxBytes: maxUploadBytes }, 413)
+      if (err instanceof TooLargeError) return c.json(err.budget ? { error: 'budget', maxBytes: err.budget } : { error: 'too_large', maxBytes: maxUploadBytes }, 413)
       throw err
     }
 
