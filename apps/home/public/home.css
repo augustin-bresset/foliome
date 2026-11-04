@@ -93,6 +93,27 @@ button { cursor: pointer; }
   color: var(--sheet);
 }
 
+/* The demo: a real site to edit, in turn. */
+.demo-call {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 18px;
+  max-width: 62ch;
+  margin: clamp(32px, 5vw, 56px) 0 0;
+  font-size: 1.05rem;
+}
+
+.demo-call .signin { flex: none; }
+
+.demo-call span { flex: 1 1 22ch; }
+
+.status {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
 /* Each sheet stays put once read, and the next one is laid over it. */
 .sheet-of-paper {
   position: sticky;

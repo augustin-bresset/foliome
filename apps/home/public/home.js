@@ -49,6 +49,23 @@
       busy: 'Le serveur est très demandé en ce moment. Réessayez dans quelques minutes.',
       opening: 'Ouverture de votre site…',
       offline: 'Impossible de joindre Foliome. Vérifiez votre connexion et réessayez.',
+      demo: 'Essayer la démo',
+      demoContext: 'L’Atelier Morane, un site d’exemple, à modifier comme le vôtre. Un visiteur à la fois : tout est remis à neuf après chacun.',
+      takeTurn: 'Prendre mon tour',
+      takeTurnAgain: 'Reprendre une place',
+      joining: 'Un instant…',
+      inLine: 'Dans la file',
+      minutes: (ms) => (ms < 60_000 ? 'moins d’une minute' : Math.ceil(ms / 60_000) === 1 ? 'une minute' : `${Math.ceil(ms / 60_000)} minutes`),
+      // « environ 8 minutes », but never « environ moins d’une minute ».
+      about: (ms) => (ms < 60_000 ? t.minutes(ms) : `environ ${t.minutes(ms)}`),
+      place: (place, wait) =>
+        place === 1 ? `C’est bientôt à vous : ${t.about(wait)} d’attente.` : `Vous êtes ${place}e dans la file : ${t.about(wait)} d’attente.`,
+      keepOpen: (turn) => `Votre tour durera ${t.minutes(turn)}. Gardez cette page ouverte : la démo s’ouvrira d’elle-même.`,
+      yourTurn: 'C’est à vous : ouverture de la démo…',
+      lineFull: 'Trop de visiteurs attendent en ce moment. Réessayez dans un moment.',
+      lineTooMany: 'Trop de demandes depuis votre connexion. Patientez quelques minutes.',
+      lostPlace: 'Votre place a été libérée : cette page a cessé de la demander pendant un moment.',
+      demoDown: 'La démo ne répond pas pour le moment. Réessayez dans quelques minutes.',
       stories: [
         { name: 'Atelier Morane', role: 'Architecture, Nantes', work: 'Halle aux grains', year: '2025', paper: 'Rose' },
         { name: 'Maison Vesper', role: 'Design graphique, Lyon', work: 'Affiches du quai', year: '2024', paper: 'Outremer' },
@@ -97,6 +114,25 @@
       busy: 'The server is very busy right now. Try again in a few minutes.',
       opening: 'Opening your site…',
       offline: 'Foliome cannot be reached. Check your connection and try again.',
+      demo: 'Try the demo',
+      demoContext: 'Atelier Morane, an example site, to edit the way you would edit yours. One visitor at a time: it is made new again after each one.',
+      takeTurn: 'Take my turn',
+      takeTurnAgain: 'Take a place again',
+      joining: 'One moment…',
+      inLine: 'In line',
+      minutes: (ms) => (ms < 60_000 ? 'less than a minute' : Math.ceil(ms / 60_000) === 1 ? 'one minute' : `${Math.ceil(ms / 60_000)} minutes`),
+      about: (ms) => (ms < 60_000 ? t.minutes(ms) : `about ${t.minutes(ms)}`),
+      place: (place, wait) => {
+        if (place === 1) return `You are next: ${t.about(wait)} to wait.`
+        const suffix = place % 100 >= 11 && place % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][place % 10] ?? 'th'
+        return `You are ${place}${suffix} in line: ${t.about(wait)} to wait.`
+      },
+      keepOpen: (turn) => `Your turn will last ${t.minutes(turn)}. Keep this page open: the demo opens by itself.`,
+      yourTurn: 'Your turn: opening the demo…',
+      lineFull: 'Too many visitors are waiting right now. Try again in a little while.',
+      lineTooMany: 'Too many requests from your connection. Wait a few minutes.',
+      lostPlace: 'Your place was given up: this page stopped asking for it for a while.',
+      demoDown: 'The demo is not responding right now. Try again in a few minutes.',
       stories: [
         { name: 'Atelier Morane', role: 'Architecture, Nantes', work: 'Grain hall', year: '2025', paper: 'Pink' },
         { name: 'Maison Vesper', role: 'Graphic design, Lyon', work: 'Posters for the quay', year: '2024', paper: 'Ultramarine' },
@@ -474,6 +510,111 @@
   $('signin').addEventListener('click', () => signIn($('signin')))
   $('signin-foot').addEventListener('click', () => signIn($('signin-foot')))
 
+  // The demo, one visitor at a time. The door keeps the line; this page holds the ticket that keeps its place, asks for
+  // it every few seconds, and goes to the demo when its turn comes. A reload keeps the place, closing the panel gives it
+  // up, and a page closed stops asking: its place goes half a minute later.
+  const KEPT = 'foliome:demo'
+  const tryDemo = (trigger) => {
+    let status
+    let hint
+    let error
+    let ticket = sessionStorage.getItem(KEPT)
+    let timer = 0
+    // Off to the demo, or the panel closed: nothing more to ask.
+    let gone = false
+    let closed = false
+    const giveUp = (place) =>
+      fetch('/entrer/demo', { method: 'POST', keepalive: true, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ticket: place, leave: true }) }).catch(() => {})
+    const leave = () => {
+      closed = true
+      clearTimeout(timer)
+      if (!ticket || gone) return
+      giveUp(ticket)
+      sessionStorage.removeItem(KEPT)
+      ticket = null
+    }
+    const say = (line, more = '') => {
+      status.textContent = line
+      hint.textContent = more
+      hint.hidden = !more
+      error.hidden = true
+      place()
+    }
+    const fail = (message, again = false) => {
+      clearTimeout(timer)
+      sessionStorage.removeItem(KEPT)
+      ticket = null
+      error.textContent = message
+      error.hidden = false
+      status.textContent = ''
+      hint.hidden = true
+      submit.disabled = false
+      submit.textContent = again ? t.takeTurnAgain : t.takeTurn
+      place()
+    }
+    const ask = async () => {
+      let res
+      try {
+        res = await fetch('/entrer/demo', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(ticket ? { ticket } : {}) })
+      } catch {
+        // A moment without a connection does not lose the place, as long as it does not last.
+        if (closed) return
+        if (ticket) timer = setTimeout(ask, 3000)
+        else fail(t.offline)
+        return
+      }
+      const answer = await res.json().catch(() => ({}))
+      if (gone) return
+      // Closed while the place was being taken: it is given back at once.
+      if (closed) return answer.ticket && !ticket && giveUp(answer.ticket)
+      if (!res.ok) {
+        if (answer.error === 'gone') return fail(t.lostPlace, true)
+        if (answer.error === 'full') return fail(t.lineFull)
+        if (answer.error === 'too_many') return fail(t.lineTooMany)
+        return fail(t.demoDown)
+      }
+      ticket = answer.ticket
+      sessionStorage.setItem(KEPT, ticket)
+      if (answer.url) {
+        // Leaving for the demo is not leaving the line.
+        gone = true
+        sessionStorage.removeItem(KEPT)
+        say(t.yourTurn)
+        location.assign(answer.url)
+        return
+      }
+      submit.textContent = t.inLine
+      if (answer.place === 0) say(t.yourTurn)
+      else say(t.place(answer.place, answer.wait), t.keepOpen(answer.turn))
+      timer = setTimeout(ask, 3000)
+    }
+    show({
+      anchor: trigger,
+      trigger,
+      title: t.demo,
+      context: t.demoContext,
+      action: t.takeTurn,
+      fields: () => {
+        status = el('p', { className: 'status', role: 'status' })
+        hint = el('p', { className: 'hint', hidden: true })
+        error = el('p', { className: 'error', hidden: true, role: 'alert' })
+        return [status, hint, error]
+      },
+      restore: leave,
+      save: () => {
+        submit.disabled = true
+        submit.textContent = t.joining
+        ask()
+        return false
+      },
+    })
+    if (ticket) {
+      submit.disabled = true
+      ask()
+    }
+  }
+  $('demo').addEventListener('click', () => tryDemo($('demo')))
+
   // A light copy of the editor's bar: what the artist finds at the bottom of their own site.
 
   const addButton = el('button', { type: 'button', className: 'bar-btn', onclick: () => openWork(null) }, icon('<path d="M8 2.5v11M2.5 8h11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>'), t.newWork)
@@ -640,7 +781,9 @@
   for (const event of ['pointerdown', 'keydown', 'wheel', 'touchstart']) {
     addEventListener(event, stop, { capture: true, passive: true })
   }
-  // Sent here by a site whose editing had gone to sleep: straight to the code.
+  // Sent here by a site whose editing had gone to sleep: straight to the code. Back from the demo, or reloaded while
+  // waiting for it: to the demo.
   if (location.hash === '#entrer') signIn($('signin'))
+  else if (location.hash === '#demo' || sessionStorage.getItem(KEPT)) tryDemo($('demo'))
   else if (!stillness.matches && !editing) play()
 })()
