@@ -35,11 +35,11 @@ async function serve(options: Partial<LocalOptions> = {}) {
 
   /** A request as it reaches the server: under the name and with the headers its sender chose. */
   const ask = (url: string, { method = 'GET', host = `localhost:${port}`, headers = {} as Record<string, string>, body = '' } = {}) =>
-    new Promise<{ status: number; text: string; cookie: string }>((done, fail) => {
+    new Promise<{ status: number; text: string; cookie: string; location: string }>((done, fail) => {
       const req = http.request({ port, host: '127.0.0.1', path: url, method, headers: { host, accept: 'text/html', ...headers } }, (res) => {
         let text = ''
         res.on('data', (chunk) => (text += chunk))
-        res.on('end', () => done({ status: res.statusCode ?? 0, text, cookie: String(res.headers['set-cookie'] ?? '') }))
+        res.on('end', () => done({ status: res.statusCode ?? 0, text, cookie: String(res.headers['set-cookie'] ?? ''), location: res.headers.location ?? '' }))
       })
       req.on('error', fail)
       req.end(body)
@@ -76,7 +76,7 @@ test('anyone else gets the door, and nothing of the site or its source', async (
   assert.equal((await ask('/_foliome/config', { host: lan })).status, 401)
   // What the door needs is open to all.
   assert.equal((await ask('/_foliome/editor.js', { host: lan })).text, '/* editor */')
-  assert.deepEqual(JSON.parse((await ask('/_foliome/session', { host: lan })).text), { editor: false })
+  assert.deepEqual(JSON.parse((await ask('/_foliome/session', { host: lan })).text), { editor: false, code: true })
 })
 
 test('the code opens the door for thirty days', async () => {
@@ -217,4 +217,133 @@ test('what comes before publishing is done before the command runs', async () =>
   const { cookie } = await signIn(code, origin, host)
   const { text } = await ask('/_foliome/publish', { method: 'POST', host, headers: { origin, ...session(cookie) } })
   assert.deepEqual(JSON.parse(text), { ok: true, log: 'committed' })
+})
+
+const KEY = 'the-door-key'
+const PUBLIC = 'atelier.example.org'
+const fromDoor = { origin: `https://${PUBLIC}`, 'content-type': 'application/json', 'x-foliome-door': KEY }
+const json = (text: string) => JSON.parse(text) as Record<string, unknown>
+
+/** A server behind a door, reached under its public name. */
+async function behindDoor(options: Partial<LocalOptions> = {}) {
+  const site = await serve({ address: new URL(`https://${PUBLIC}`), doorKey: KEY, ...options })
+  const grant = async (ms: number, home = 'https://foliome.example/#demo') =>
+    json((await site.ask('/_foliome/door', { method: 'POST', host: PUBLIC, headers: fromDoor, body: JSON.stringify({ grant: { ms, home } }) })).text).ticket as string
+  const presence = async () => json((await site.ask('/_foliome/door', { host: PUBLIC, headers: fromDoor })).text)
+  const call = (url: string, cookie: string, body?: unknown) =>
+    site.ask(url, {
+      method: body === undefined ? 'GET' : 'POST',
+      host: PUBLIC,
+      headers: { origin: `https://${PUBLIC}`, 'content-type': 'application/json', ...session(cookie) },
+      body: body === undefined ? '' : JSON.stringify(body),
+    })
+  return { ...site, grant, presence, call }
+}
+
+test('a ticket from the door opens one session, once, for the time granted, and closes every other', async () => {
+  const site = await behindDoor()
+  const before = await site.signIn(site.code, `https://${PUBLIC}`, PUBLIC)
+  assert.equal(before.status, 200)
+
+  const ticket = await site.grant(10 * 60_000)
+  assert.equal((await site.call('/_foliome/content', before.cookie)).status, 401)
+
+  const entered = await site.ask(`/projets/halle?lang=fr&ticket=${ticket}`, { host: PUBLIC })
+  assert.equal(entered.status, 303)
+  assert.equal(entered.location, '/projets/halle?lang=fr&edit')
+  assert.match(entered.cookie, /HttpOnly/)
+  assert.match(entered.cookie, /Secure/)
+  const age = Number(/Max-Age=(\d+)/.exec(entered.cookie)?.[1])
+  assert.ok(age > 590 && age <= 600, String(age))
+  assert.equal((await site.call('/_foliome/content', entered.cookie)).status, 200)
+
+  // Once only. Whoever already holds the session is let through; anyone else is told the ticket is spent.
+  const again = await site.ask(`/?ticket=${ticket}`, { host: PUBLIC, headers: session(entered.cookie) })
+  assert.equal(again.status, 303)
+  const stranger = await site.ask(`/?ticket=${ticket}`, { host: PUBLIC })
+  assert.equal(stranger.status, 401)
+  assert.match(stranger.text, /data-foliome-door="ticket"/)
+  assert.equal((await site.ask('/?ticket=forged', { host: PUBLIC })).status, 401)
+})
+
+test('without the door’s key nobody grants anything', async () => {
+  const site = await behindDoor()
+  const reply = await site.ask('/_foliome/door', { method: 'POST', host: PUBLIC, headers: { ...fromDoor, 'x-foliome-door': 'guess' }, body: JSON.stringify({ grant: { ms: 1000 } }) })
+  assert.equal(reply.status, 404)
+})
+
+test('a restricted site opens only by ticket, publishes nothing and stays out of search engines', async () => {
+  const site = await behindDoor({ restricted: { mediaBudget: 1000 }, maxFileSize: 600, publish: 'echo published' })
+  assert.equal((await site.signIn(site.code, `https://${PUBLIC}`, PUBLIC)).status, 403)
+  const ticket = await site.grant(60_000)
+  const page = await site.ask(`/?ticket=${ticket}`, { host: PUBLIC })
+  const { cookie } = page
+  assert.deepEqual(json((await site.call('/_foliome/session', cookie)).text), { editor: true, code: false, home: 'https://foliome.example/#demo' })
+  assert.equal((await site.call('/_foliome/publish', cookie, {})).status, 404)
+  const config = json((await site.call('/_foliome/config', cookie)).text)
+  assert.equal(config.publish, false)
+  assert.equal(config.restricted, true)
+  assert.equal(config.maxFileSize, 600)
+
+  // Uploads: each file has a limit, and the session a budget.
+  const put = (size: number) =>
+    site.ask('/_foliome/assets?name=plan.bin', { method: 'PUT', host: PUBLIC, headers: { origin: `https://${PUBLIC}`, 'content-type': 'application/octet-stream', ...session(cookie) }, body: 'x'.repeat(size) })
+  const big = await put(700)
+  assert.equal(big.status, 413)
+  assert.equal(json(big.text).error, 'too_large')
+  assert.equal((await put(500)).status, 200)
+  assert.equal((await put(400)).status, 200)
+  const over = await put(300)
+  assert.equal(over.status, 413)
+  assert.deepEqual(json(over.text), { error: 'budget', maxBytes: 1000 })
+  // The next visitor starts with the whole budget.
+  const next = await site.ask(`/?ticket=${await site.grant(60_000)}`, { host: PUBLIC })
+  assert.equal(
+    (await site.ask('/_foliome/assets?name=plan.bin', { method: 'PUT', host: PUBLIC, headers: { origin: `https://${PUBLIC}`, ...session(next.cookie) }, body: 'x'.repeat(500) })).status,
+    200,
+  )
+
+  const door = await site.ask('/', { host: PUBLIC })
+  assert.equal(door.status, 401)
+  assert.match((await new Promise<string>((done) => http.get({ port: site.port, host: '127.0.0.1', path: '/', headers: { host: PUBLIC } }, (res) => done(String(res.headers['x-robots-tag']))))), /noindex/)
+})
+
+test('a file over the site’s limit is refused', async () => {
+  const { ask, port } = await serve({ maxFileSize: 10 })
+  const reply = await ask('/_foliome/assets?name=a.txt', { method: 'PUT', headers: { origin: `http://localhost:${port}`, 'content-type': 'text/plain' }, body: 'x'.repeat(11) })
+  assert.equal(reply.status, 413)
+  assert.deepEqual(json(reply.text), { error: 'too_large', maxBytes: 10 })
+})
+
+test('what a panel holds unsaved is kept as a draft until it is saved or let go', async () => {
+  const site = await behindDoor()
+  const { cookie } = await site.signIn(site.code, `https://${PUBLIC}`, PUBLIC)
+  const beat = (body: unknown) => site.call('/_foliome/presence', cookie, body)
+  const drafts = async () => json((await site.call('/_foliome/drafts', cookie)).text).drafts as Record<string, { value: unknown; at: number }>
+
+  await beat({ dirty: true, active: true })
+  assert.equal((await site.presence()).drafted, false)
+
+  await beat({ dirty: true, active: false, drafts: [{ path: 'site.name', value: 'Atelier M.' }, { path: 'site.baseline', value: { $t: { fr: 'Bonjour' } } }] })
+  assert.equal((await site.presence()).drafted, true)
+  assert.deepEqual(Object.keys(await drafts()), ['site.name', 'site.baseline'])
+  // Nothing that is not a field's path is kept.
+  await beat({ dirty: true, drafts: [{ path: '../../etc', value: 1 }] })
+  assert.equal((await site.presence()).drafted, false)
+  assert.equal(Object.keys(await drafts()).length, 2)
+
+  // Saving the field lets its draft go; so does giving it up.
+  const saved = await site.call('/_foliome/ops', cookie, { ops: [{ op: 'set', path: 'site', value: { name: 'Atelier M.' } }] })
+  assert.equal(saved.status, 200)
+  assert.deepEqual(await drafts(), {})
+
+  await beat({ dirty: true, drafts: [{ path: 'site.name', value: 'Autre' }] })
+  await site.call('/_foliome/drafts', cookie, { drop: ['site.name'] })
+  assert.deepEqual(await drafts(), {})
+
+  // Written to disk, for the next time the server starts.
+  await beat({ dirty: true, drafts: [{ path: 'site.name', value: 'Gardé' }] })
+  await new Promise((done) => setTimeout(done, 1300))
+  const disk = JSON.parse(await readFile(path.join(site.root, '.foliome', 'drafts.json'), 'utf8')) as Record<string, { value: unknown }>
+  assert.equal(disk['site.name']?.value, 'Gardé')
 })

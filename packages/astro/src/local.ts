@@ -6,13 +6,13 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { isIP } from 'node:net'
 import path from 'node:path'
 import { mimeOf, type Schema } from '@foliome/core'
-import { createApp, type Storage } from '@foliome/server'
+import { createApp, type Storage, TooLargeError } from '@foliome/server'
 import { fsStorage } from '@foliome/server/fs'
 import { detectTools } from '@foliome/server/media'
 import { getRequestListener, type HttpBindings } from '@hono/node-server'
 import { Hono, type MiddlewareHandler } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
-import { parse } from 'hono/utils/cookie'
+import { parse, serialize } from 'hono/utils/cookie'
 
 /**
  * Local editing: the site's dev server doubles as the editing service.
@@ -43,6 +43,14 @@ export interface LocalOptions {
    * used, and leaves notices for the artist. Unset, nobody can ask.
    */
   doorKey?: string
+  /** Largest file the artist may send, in bytes. Unset: 2 GB. */
+  maxFileSize?: number
+  /**
+   * For a site lent to strangers, a public demo for instance. Nobody enters with the access code, only through a
+   * one-time ticket the door hands out, for a session as long as the door decided. Nothing is published, pages are
+   * kept out of search engines, and `mediaBudget` bytes of files may be sent in a session, in all.
+   */
+  restricted?: { mediaBudget?: number }
 }
 
 /** How this editing server is being used, as the door sees it. */
@@ -55,10 +63,26 @@ export interface Presence {
   editors: number
   /** A request is under way, an upload or a publish: closing now would cut it. */
   busy: boolean
+  /** Every unsaved change an open editor holds has reached this server as a draft: closing would lose nothing. */
+  drafted: boolean
 }
 
-/** What the door has to say to the artist, through the editor. */
-export type Notice = { kind: 'closing'; at: number; unsaved: boolean } | { kind: 'closed'; home?: string }
+/**
+ * What the door has to say to the artist, through the editor. `reason` says why: nothing done for a while (`idle`, the
+ * default), room needed for someone else (`room`), or the time granted is over (`time`).
+ */
+export type Notice =
+  /** The session closes at `at`. */
+  | { kind: 'closing'; at: number; unsaved: boolean; reason?: 'idle' | 'time' }
+  | { kind: 'closed'; home?: string; reason?: 'idle' | 'room' | 'time'; after?: number }
+  /** Nothing to show yet: the session may close at any moment now, after `after` ms left alone, with no other warning. */
+  | { kind: 'standby'; reason: 'room'; after: number; home?: string }
+
+/** The last thing an editor had not saved in a field, kept until it is saved or let go. */
+export interface Draft {
+  value: unknown
+  at: number
+}
 
 interface State {
   code: string
@@ -68,6 +92,8 @@ interface State {
   failures: Record<string, { count: number; resetAt: number }>
   /** Visitors who have signed in before: a flood of wrong codes from elsewhere does not shut them out. */
   known: string[]
+  /** Where the door that grants sessions sends people back to, given with its last grant. */
+  home?: string
 }
 
 type Env = { Bindings: HttpBindings }
@@ -85,6 +111,13 @@ const EVERYBODY = '*'
 const KNOWN_VISITORS = 50
 /** An editor gives a sign of life every thirty seconds: one missed is allowed. */
 const ALIVE = 75_000
+/** A ticket from the door is for someone being sent here right away. */
+const TICKET_LIFE = 2 * 60_000
+const LONGEST_SESSION = SESSION_DAYS * 86_400_000
+const DRAFT_PATH = /^[\w-]+(\.[\w-]+)*$/
+/** What one sign of life may bring as drafts, in all: far more than any text typed by hand. */
+const DRAFTS_SIZE = 512 * 1024
+const MAX_FILE = 2 * 1024 ** 3
 
 // No I, L, O, 0 or 1: the code is read aloud and typed by hand.
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
@@ -112,7 +145,7 @@ async function loadState(file: string): Promise<State> {
   try {
     const saved = JSON.parse(await readFile(file, 'utf8')) as Partial<State>
     if (typeof saved.code === 'string' && saved.code.length === 8) {
-      state = { code: saved.code, sessions: saved.sessions ?? {}, failures: saved.failures ?? {}, known: saved.known ?? [] }
+      state = { code: saved.code, sessions: saved.sessions ?? {}, failures: saved.failures ?? {}, known: saved.known ?? [], home: saved.home }
     }
   } catch {
     // First run, or an unreadable file: start fresh.
@@ -125,9 +158,22 @@ async function loadState(file: string): Promise<State> {
   return state
 }
 
+async function loadDrafts(file: string): Promise<Record<string, Draft>> {
+  try {
+    const saved = JSON.parse(await readFile(file, 'utf8')) as unknown
+    return typeof saved === 'object' && saved !== null && !Array.isArray(saved) ? (saved as Record<string, Draft>) : {}
+  } catch {
+    return {}
+  }
+}
+
+/** Whether a change at `changed` replaces what was drafted at `drafted`: the same field, one inside it, or around it. */
+const overlaps = (changed: string, drafted: string) => changed === drafted || drafted.startsWith(`${changed}.`) || changed.startsWith(`${drafted}.`)
+
 export async function createLocal(options: LocalOptions) {
   const dir = path.join(options.root, '.foliome')
   const stateFile = path.join(dir, 'local.json')
+  const draftsFile = path.join(dir, 'drafts.json')
   const mediaDir = path.join(options.root, 'public', 'media')
   const state = await loadState(stateFile)
   let saving: Promise<unknown> = Promise.resolve()
@@ -135,6 +181,57 @@ export async function createLocal(options: LocalOptions) {
     saving = saving.catch(() => {}).then(() => storeState(stateFile, state))
     return saving
   }
+  const restricted = options.restricted
+  const publishCommand = restricted ? undefined : options.publish
+  const maxFileSize = options.maxFileSize ?? MAX_FILE
+
+  // Drafts: what open panels hold unsaved, sent with each sign of life, so that closing the server for want of room
+  // loses none of it. Written to disk shortly after each change, and when the server stops.
+  let drafts = await loadDrafts(draftsFile)
+  let draftsTimer: ReturnType<typeof setTimeout> | null = null
+  let draftsWriting: Promise<unknown> = Promise.resolve()
+  const writeDrafts = () => {
+    if (draftsTimer) clearTimeout(draftsTimer)
+    draftsTimer = null
+    const text = JSON.stringify(drafts)
+    draftsWriting = draftsWriting
+      .catch(() => {})
+      .then(async () => {
+        const tmp = `${draftsFile}.tmp`
+        await writeFile(tmp, text)
+        await rename(tmp, draftsFile)
+      })
+      .catch((err: unknown) => console.warn('foliome: drafts could not be written', err))
+    return draftsWriting
+  }
+  const draftsChanged = () => {
+    // Not a reason for the process to stay: stopping writes them down anyway.
+    draftsTimer ??= setTimeout(writeDrafts, 1000).unref()
+  }
+  const dropDrafts = (which: (draft: string) => boolean) => {
+    const before = Object.keys(drafts).length
+    drafts = Object.fromEntries(Object.entries(drafts).filter(([draft]) => !which(draft)))
+    if (Object.keys(drafts).length !== before) draftsChanged()
+  }
+  /** Keeps what an editor sent; says whether all of it was kept. */
+  const keepDrafts = (given: unknown) => {
+    if (!Array.isArray(given) || given.length === 0 || given.length > 100) return false
+    const entries = given.filter(
+      (entry): entry is { path: string; value: unknown } =>
+        typeof entry === 'object' && entry !== null && typeof entry.path === 'string' && entry.path.length <= 300 && DRAFT_PATH.test(entry.path) && 'value' in entry,
+    )
+    if (entries.length !== given.length || JSON.stringify(entries).length > DRAFTS_SIZE) return false
+    const at = Date.now()
+    for (const { path: field, value } of entries) {
+      if (JSON.stringify(drafts[field]?.value) === JSON.stringify(value)) continue
+      drafts[field] = { value, at }
+      draftsChanged()
+    }
+    return true
+  }
+
+  // In a restricted session, what is sent counts against its budget, from the moment the door grants it.
+  let mediaSpent = 0
 
   const tools = await detectTools()
   const files = fsStorage({
@@ -146,6 +243,20 @@ export async function createLocal(options: LocalOptions) {
   })
   const storage: Storage = {
     ...files,
+    async putFile(id, name, body, maxBytes) {
+      const budget = restricted?.mediaBudget
+      if (!budget) return files.putFile(id, name, body, maxBytes)
+      const left = budget - mediaSpent
+      if (left <= 0) throw new TooLargeError(budget)
+      try {
+        const stored = await files.putFile(id, name, body, Math.min(maxBytes, left))
+        mediaSpent += stored.size
+        return stored
+      } catch (err) {
+        if (err instanceof TooLargeError && left < maxBytes) throw new TooLargeError(budget)
+        throw err
+      }
+    },
     async update(change) {
       const doc = await files.update(change)
       options.onChange()
@@ -192,12 +303,14 @@ export async function createLocal(options: LocalOptions) {
   let lastActivity = Date.now()
   let inFlight = 0
   let notice: Notice | null = null
-  /** Each open editor's last sign of life, by session, and whether it held unsaved changes. */
-  const editors = new Map<string, { at: number; dirty: boolean }>()
-  /** The artist did something: whatever the door was about to say about their absence no longer holds. */
+  /** Each open editor's last sign of life, by session, whether it held unsaved changes, and whether they came as drafts. */
+  const editors = new Map<string, { at: number; dirty: boolean; drafted: boolean }>()
+  /** One-time tickets the door handed out, by hash: until when each may be used, and when its session will end. */
+  const tickets = new Map<string, { expires: number; until: number }>()
+  /** The artist did something: whatever the door was about to say about their absence no longer holds. Time granted still runs out. */
   const touch = () => {
     lastActivity = Date.now()
-    if (notice?.kind === 'closing') notice = null
+    if ((notice?.kind === 'closing' && notice.reason !== 'time') || notice?.kind === 'standby') notice = null
   }
   const presence = (): Presence => {
     const now = Date.now()
@@ -207,6 +320,7 @@ export async function createLocal(options: LocalOptions) {
       dirty: [...editors.values()].some((beat) => beat.dirty),
       editors: editors.size,
       busy: inFlight > 0 || publishing,
+      drafted: [...editors.values()].every((beat) => beat.drafted),
     }
   }
   const fromDoor = (req: IncomingMessage) => {
@@ -250,16 +364,51 @@ export async function createLocal(options: LocalOptions) {
     return /[\\/]\.foliome([\\/?#]|$)/i.test(plain)
   }
 
-  // Whoever has not signed in is given one page, which asks for the code: the editor shows its prompt on it.
-  const doorPage = `<!doctype html><html lang="fr" data-foliome-door><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><link rel="icon" href="data:,"><title>${escapeHtml(options.name)}</title><style>html{background:#f2f2f5}</style></head><body><script src="${API}/editor.js"></script></body></html>`
-  const door = (req: IncomingMessage, res: ServerResponse) => {
+  // Whoever has not signed in is given one page, which asks for the code: the editor shows its prompt on it. Turned
+  // away with a ticket that no longer opens anything, they are told so.
+  const doorPage = (why = '') =>
+    `<!doctype html><html lang="fr" data-foliome-door="${why}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><link rel="icon" href="data:,"><title>${escapeHtml(options.name)}</title><style>html{background:#f2f2f5}</style></head><body><script src="${API}/editor.js"></script></body></html>`
+  const door = (req: IncomingMessage, res: ServerResponse, why = '') => {
     const page = req.method === 'GET' && (req.headers.accept ?? '').includes('text/html')
     res.writeHead(401, {
       'content-type': `${page ? 'text/html' : 'text/plain'}; charset=utf-8`,
       'cache-control': 'no-store',
       'x-robots-tag': 'noindex',
     })
-    res.end(page ? doorPage : 'unauthorized')
+    res.end(page ? doorPage(why) : 'unauthorized')
+  }
+
+  /** Over the public address the cookie only ever travels encrypted. */
+  const secureFor = (host: string | undefined) => options.address?.protocol === 'https:' && hostName(host) === options.address.hostname
+
+  /**
+   * A ticket from the door, exchanged once for the session it was handed out for. The address is then cleaned of it,
+   * so that it is neither kept in the history nor shown, and asks for the editor.
+   */
+  async function exchange(req: IncomingMessage, res: ServerResponse, url: URL, ticket: string) {
+    url.searchParams.delete('ticket')
+    url.searchParams.delete('edit')
+    const rest = url.searchParams.toString()
+    const clean = `${url.pathname}?${rest ? `${rest}&` : ''}edit`
+    const hash = sha256(ticket)
+    const granted = tickets.get(hash)
+    const now = Date.now()
+    if (granted && granted.expires > now && granted.until > now) {
+      tickets.delete(hash)
+      const token = randomBytes(32).toString('base64url')
+      // The one session: whoever had one before is out.
+      state.sessions = { [sha256(token)]: granted.until }
+      await save()
+      const cookie = serialize(COOKIE, token, { path: '/', httpOnly: true, sameSite: 'Lax', secure: secureFor(req.headers.host), maxAge: Math.floor((granted.until - now) / 1000) })
+      res.writeHead(303, { location: clean, 'set-cookie': cookie, 'cache-control': 'no-store' })
+      return res.end()
+    }
+    // Followed again by the one it was given to, already in: nothing to exchange.
+    if (isEditor(req)) {
+      res.writeHead(303, { location: clean, 'cache-control': 'no-store' })
+      return res.end()
+    }
+    door(req, res, 'ticket')
   }
 
   const app = new Hono<Env>().basePath(API)
@@ -283,9 +432,11 @@ export async function createLocal(options: LocalOptions) {
     await next()
   })
 
-  app.get('/session', (c) => c.json({ editor: isEditor(c.env.incoming) }))
+  // Whether the code opens this site at all, and where the door that hands out sessions is, for whoever has none.
+  app.get('/session', (c) => c.json({ editor: isEditor(c.env.incoming), code: !restricted, ...(restricted && state.home ? { home: state.home } : {}) }))
 
   app.post('/login', async (c) => {
+    if (restricted) return c.json({ error: 'no_code' }, 403)
     // The code is read first. From the count to the verdict nothing waits: requests held open and released together
     // are judged one at a time, each seeing the count the last one left.
     const body = (await c.req.json().catch(() => null)) as { code?: unknown } | null
@@ -306,9 +457,7 @@ export async function createLocal(options: LocalOptions) {
     const token = randomBytes(32).toString('base64url')
     state.sessions[sha256(token)] = Date.now() + SESSION_DAYS * 86_400_000
     await save()
-    // Over the public address the cookie only ever travels encrypted.
-    const secure = options.address?.protocol === 'https:' && hostName(c.req.header('host')) === options.address.hostname
-    setCookie(c, COOKIE, token, { path: '/', httpOnly: true, sameSite: 'Lax', secure, maxAge: SESSION_DAYS * 86_400 })
+    setCookie(c, COOKIE, token, { path: '/', httpOnly: true, sameSite: 'Lax', secure: secureFor(c.req.header('host')), maxAge: SESSION_DAYS * 86_400 })
     return c.json({ ok: true })
   })
 
@@ -324,20 +473,64 @@ export async function createLocal(options: LocalOptions) {
 
   // Each open editor's sign of life, which tells whether the artist did anything since the last one. The answer
   // carries what the door has to say: the time left is counted here, the artist's clock may be wrong.
+  // With unsaved changes it also carries them, as drafts: see `drafted` in the presence.
   app.post('/presence', guard, async (c) => {
-    const body = (await c.req.json().catch(() => null)) as { dirty?: unknown; active?: unknown } | null
+    const body = (await c.req.json().catch(() => null)) as { dirty?: unknown; active?: unknown; drafts?: unknown } | null
     const token = getCookie(c, COOKIE)
-    editors.set(token ? sha256(token) : 'this machine', { at: Date.now(), dirty: body?.dirty === true })
+    const dirty = body?.dirty === true
+    const drafted = keepDrafts(body?.drafts)
+    editors.set(token ? sha256(token) : 'this machine', { at: Date.now(), dirty, drafted: !dirty || drafted })
     if (body?.active === true) touch()
-    if (notice?.kind === 'closing') return c.json({ notice: { kind: 'closing', in: Math.max(0, notice.at - Date.now()), unsaved: notice.unsaved } })
+    if (notice?.kind === 'closing') {
+      const { at, ...rest } = notice
+      return c.json({ notice: { ...rest, in: Math.max(0, at - Date.now()) } })
+    }
     return c.json({ notice })
+  })
+
+  // Drafts kept from earlier, offered back when the artist opens the same fields again; and let go of.
+  app.get('/drafts', guard, (c) => c.json({ drafts }))
+  app.post('/drafts', guard, async (c) => {
+    const body = (await c.req.json().catch(() => null)) as { drop?: unknown } | null
+    const drop = Array.isArray(body?.drop) ? body.drop.filter((field): field is string => typeof field === 'string') : []
+    dropDrafts((draft) => drop.includes(draft))
+    return c.json({ ok: true })
+  })
+  // A saved change replaces the draft of the same fields. Read before the change is made: the request is read once.
+  app.use('/ops', async (c, next) => {
+    const body = (await c.req.json().catch(() => null)) as { ops?: unknown } | null
+    await next()
+    if (!c.res.ok || !Array.isArray(body?.ops)) return
+    for (const op of body.ops as { op?: unknown; path?: unknown }[]) {
+      if ((op?.op === 'set' || op?.op === 'remove') && typeof op.path === 'string') dropDrafts((draft) => overlaps(op.path as string, draft))
+    }
   })
 
   // The door alone, with its key. To anyone else these do not exist.
   app.get('/door', (c) => (fromDoor(c.env.incoming) ? c.json(presence()) : c.json({ error: 'not_found' }, 404)))
   app.post('/door', async (c) => {
     if (!fromDoor(c.env.incoming)) return c.json({ error: 'not_found' }, 404)
-    const body = (await c.req.json().catch(() => null)) as { notice?: Notice | null } | null
+    const body = (await c.req.json().catch(() => null)) as { notice?: Notice | null; grant?: { ms?: unknown; home?: unknown } } | null
+    if (body?.grant) {
+      // A session for whoever the door sends here next, for `ms`, entered through the ticket returned. Every other
+      // session ends: the site is theirs alone.
+      const ms = Number(body.grant.ms)
+      if (!Number.isFinite(ms) || ms <= 0 || ms > LONGEST_SESSION) return c.json({ error: 'invalid' }, 400)
+      const now = Date.now()
+      state.sessions = {}
+      tickets.clear()
+      editors.clear()
+      notice = null
+      mediaSpent = 0
+      const home = body.grant.home
+      if (typeof home === 'string' && /^https?:\/\//.test(home)) state.home = home
+      // A site lent to one stranger after another: nobody finds what the last one left unsaved.
+      if (restricted) dropDrafts(() => true)
+      await save()
+      const ticket = randomBytes(32).toString('base64url')
+      tickets.set(sha256(ticket), { expires: Math.min(now + TICKET_LIFE, now + ms), until: now + ms })
+      return c.json({ ticket })
+    }
     notice = body?.notice ?? null
     return c.json({ ok: true })
   })
@@ -355,8 +548,10 @@ export async function createLocal(options: LocalOptions) {
     c.json({
       name: options.name,
       schema: options.schema,
-      publish: !!options.publish,
+      publish: !!publishCommand,
       converts: { heic: !!(tools.sharp && tools.heic), tiff: !!tools.sharp },
+      maxFileSize,
+      restricted: !!restricted,
     }),
   )
 
@@ -364,7 +559,7 @@ export async function createLocal(options: LocalOptions) {
   // started by the artist. One run at a time; the artist waits for the outcome.
   let publishing = false
   app.post('/publish', guard, async (c) => {
-    if (!options.publish) return c.json({ error: 'not_configured' }, 404)
+    if (!publishCommand) return c.json({ error: 'not_configured' }, 404)
     if (publishing) return c.json({ error: 'busy' }, 409)
     publishing = true
     try {
@@ -378,7 +573,7 @@ export async function createLocal(options: LocalOptions) {
         const keep = (chunk: Buffer) => {
           log = (log + chunk.toString()).slice(-6000)
         }
-        const child = spawn(options.publish!, { cwd: options.root, env, shell: true })
+        const child = spawn(publishCommand, { cwd: options.root, env, shell: true })
         child.stdout.on('data', keep)
         child.stderr.on('data', keep)
         child.on('error', (err) => done({ ok: false, log: `${log}\n${err.message}` }))
@@ -389,7 +584,7 @@ export async function createLocal(options: LocalOptions) {
       publishing = false
     }
   })
-  app.route('/', createApp({ storage, guard: guard as MiddlewareHandler }))
+  app.route('/', createApp({ storage, guard: guard as MiddlewareHandler, maxUploadBytes: maxFileSize }))
 
   const api = getRequestListener(app.fetch)
 
@@ -447,11 +642,21 @@ export async function createLocal(options: LocalOptions) {
     tools,
     /** Whether a request comes from someone who may see the site. */
     allows: isEditor,
+    /** Writes down the drafts not yet on disk: called when the server stops. */
+    close: () => (draftsTimer ? writeDrafts() : draftsWriting),
     /** The first thing a request meets, ahead of anything the dev server would answer by itself. */
     gate(req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) {
       const url = req.url ?? ''
+      // Lent to strangers: nothing of it belongs in a search engine.
+      if (restricted) res.setHeader('x-robots-tag', 'noindex, nofollow')
       // The API answers for itself: signing in is open to all, the rest is guarded route by route.
       if (isApi(url)) return next()
+      // Only the door hands out tickets: without its key there are none, and the parameter is the site's own business.
+      if (options.doorKey && req.method === 'GET' && url.includes('ticket=')) {
+        const parsed = new URL(url, 'http://site')
+        const ticket = parsed.searchParams.get('ticket')
+        if (ticket) return void exchange(req, res, parsed, ticket).catch(next)
+      }
       if (!isEditor(req)) return door(req, res)
       if (isPrivate(url)) return void res.writeHead(404).end()
       next()
