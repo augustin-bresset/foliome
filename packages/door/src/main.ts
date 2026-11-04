@@ -6,6 +6,7 @@ import { type Control, door, type Limits, type Site } from './door.ts'
 
 // FOLIOME_DOOR_CONFIG names a JSON file:
 // { "home": "https://foliome.eu", "sites": [{ "name": "tom.foliome.eu", "port": 4331, "root": "/srv/foliome/tom-conan", "unit": "foliome-site@tom-conan.service" }] }
+// A site marked "demo": true is lent to visitors in turn, with a slot of its own. "limits" overrides any of LIMITS.
 // FOLIOME_DOOR_KEY is shared with every site's editing server.
 const config = JSON.parse(readFileSync(process.env.FOLIOME_DOOR_CONFIG ?? '/etc/foliome/door.json', 'utf8')) as {
   home: string
@@ -30,7 +31,7 @@ const control: Control = {
   },
 }
 
-const { handle, watch } = door({ home: config.home, sites: config.sites, key, control, limits: config.limits })
+const { handle, watch, turns } = door({ home: config.home, sites: config.sites, key, control, limits: config.limits })
 createServer(handle).listen(Number(process.env.PORT ?? 4330), '127.0.0.1')
 
 let watching = false
@@ -43,3 +44,6 @@ setInterval(() => {
       watching = false
     })
 }, 30_000)
+// The demo's line moves faster: a turn that ends early goes to the next visitor within seconds. Only one move runs
+// at a time, whoever asks.
+setInterval(() => void turns(), 5_000)
