@@ -1,6 +1,6 @@
 import { type Doc, resolvePath, type Schema } from '@foliome/core'
 import { useEffect, useRef, useState } from 'preact/hooks'
-import { api, explain, type Notice, type SiteConfig } from './api.ts'
+import { api, type DraftOut, type Drafts, explain, type Notice, type SiteConfig } from './api.ts'
 import { t } from './i18n.ts'
 import { type Open, Panel } from './Panel.tsx'
 import { useFollow, zoneAt } from './zones.ts'
@@ -9,6 +9,10 @@ interface Props {
   host: HTMLElement
   config: SiteConfig
   initial: { content: Doc; canUndo: boolean }
+  /** Unsaved changes kept on the server from an earlier visit. */
+  drafts: Drafts
+  /** Where whoever lent this session sends people back to, if anywhere. */
+  home?: string
   onQuit: () => void
 }
 
@@ -56,7 +60,14 @@ function Outline(props: { el: HTMLElement; active?: boolean; label?: string; lin
   )
 }
 
-export function App({ host, config, initial: loaded, onQuit }: Props) {
+/** What to show when the server no longer answers, given what it said last. */
+function closedAfter(last: Notice, home: string | undefined): Notice {
+  if (last?.kind === 'closing') return { kind: 'closed', reason: last.reason ?? 'idle', home }
+  if (last?.kind === 'standby') return { kind: 'closed', reason: last.reason, after: last.after, home: last.home ?? home }
+  return null
+}
+
+export function App({ host, config, initial: loaded, drafts: keptBefore, home, onQuit }: Props) {
   // The stored content, fetched again after a save the page showed live (no reload to bring it).
   const [initial, setInitial] = useState(loaded)
   const { schema } = config
@@ -70,14 +81,32 @@ export function App({ host, config, initial: loaded, onQuit }: Props) {
   const [busy, setBusy] = useState<'undo' | 'publish' | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const [notice, setNotice] = useState<Notice>(null)
+  // When the notice came: a closing time is counted down from it between signs of life.
+  const [noticeAt, setNoticeAt] = useState(0)
+  const [, tick] = useState(0)
+  const [kept, setKept] = useState(keptBefore)
 
   // Event handlers below are registered once; they read the latest state through this ref.
   const dirty = useRef(false)
   const live = useRef({ mode, open })
   live.current = { mode, open }
   const following = useRef(false)
+  /** What the open panel holds unsaved, sent with each sign of life. */
+  const outgoing = useRef<DraftOut[]>([])
+  /** Whether the server has the drafts the open panel holds: if the session closes, they are not lost. */
+  const draftsSent = useRef(false)
+
+  const dropDrafts = (paths: string[]) => {
+    if (paths.length === 0) return
+    setKept((all) => Object.fromEntries(Object.entries(all).filter(([path]) => !paths.includes(path))))
+    api.dropDrafts(paths).catch(() => {})
+  }
 
   const show = (next: Open | null) => {
+    // Closing a panel lets go of what it held: the artist chose not to keep it.
+    dropDrafts(outgoing.current.map((draft) => draft.path))
+    outgoing.current = []
+    draftsSent.current = false
     setOpen(next)
     setPanelKey((k) => k + 1)
     setMenu(false)
@@ -160,36 +189,63 @@ export function App({ host, config, initial: loaded, onQuit }: Props) {
   }, [])
 
   // A sign of life every half minute, saying whether the artist did anything and whether a panel holds unsaved
-  // changes. On a shared server it keeps the session open while it is used, and brings back the warning before it
-  // closes.
+  // changes, which it carries as drafts. On a shared server it keeps the session open while it is used, and brings
+  // back the warning before it closes.
   const beat = useRef<(active: boolean) => void>(() => {})
   useEffect(() => {
     let active = false
-    let warned = false
+    let last: Notice = null
+    let closed = false
     const mark = () => {
       active = true
     }
     const events = ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const
     for (const name of events) window.addEventListener(name, mark, { capture: true, passive: true })
     const send = (now = active) => {
+      if (closed) return
       active = false
-      api.presence({ dirty: dirty.current, active: now }).then(
+      const drafts = outgoing.current
+      api.presence({ dirty: dirty.current, active: now, ...(drafts.length ? { drafts } : {}) }).then(
         ({ notice }) => {
-          warned = notice?.kind === 'closing'
-          setNotice(notice)
+          draftsSent.current = drafts.length > 0 && drafts === outgoing.current
+          last = notice
+          closed = notice?.kind === 'closed'
+          // Nothing to show yet: it only says why, should the session close without another word.
+          setNotice(notice?.kind === 'standby' ? null : notice)
+          setNoticeAt(Date.now())
         },
-        // Warned a moment ago and now unanswered: the session has closed.
-        () => warned && setNotice({ kind: 'closed' }),
+        // Unanswered after the server said it would close: it has. Asked once more, so a lost connection is not taken
+        // for it.
+        () => {
+          const fallback = closedAfter(last, home)
+          if (!fallback) return
+          const close = () => {
+            closed = true
+            setNotice(fallback)
+          }
+          api.session().then(({ editor }) => !editor && close(), close)
+        },
       )
     }
     beat.current = send
     send()
     const timer = setInterval(send, 30_000)
+    // A tab the browser kept asleep says so as soon as it is looked at again.
+    const onVisible = () => document.visibilityState === 'visible' && send()
+    document.addEventListener('visibilitychange', onVisible)
     return () => {
       clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisible)
       for (const name of events) window.removeEventListener(name, mark, { capture: true })
     }
   }, [])
+
+  // The time left, counted down between two signs of life.
+  useEffect(() => {
+    if (notice?.kind !== 'closing') return
+    const timer = setInterval(() => tick((n) => n + 1), 5000)
+    return () => clearInterval(timer)
+  }, [notice])
 
   // Lets the page (and the editor's own marks for empty zones) know which mode is on.
   useEffect(() => {
@@ -280,6 +336,11 @@ export function App({ host, config, initial: loaded, onQuit }: Props) {
           onDirty={(value) => {
             dirty.current = value
           }}
+          drafts={kept}
+          onDraft={(drafts) => {
+            outgoing.current = drafts
+          }}
+          onDropDrafts={dropDrafts}
           onClose={() => show(null)}
           onOpen={show}
           onSaved={saved}
@@ -358,29 +419,42 @@ export function App({ host, config, initial: loaded, onQuit }: Props) {
         </button>
       </div>
 
-      {notice && (
+      {notice?.kind === 'closing' && (
+        <div class="notice" role="alert">
+          {notice.reason === 'time' ? (
+            // Time granted runs out whatever the artist does: nothing to put off.
+            <p>{(config.restricted ? t.trialEnding : t.timeEnding)(Math.max(0, notice.in - (Date.now() - noticeAt)))}</p>
+          ) : (
+            <>
+              <p>{(notice.unsaved ? t.closingUnsaved : t.closingSoon)(Math.max(1, Math.ceil((notice.in - (Date.now() - noticeAt)) / 60_000)))}</p>
+              <button
+                type="button"
+                class="btn"
+                onClick={() => {
+                  setNotice(null)
+                  beat.current(true)
+                }}
+              >
+                {t.stay}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+      {notice?.kind === 'closed' && (
         <div class="notice" role="alert">
           <p>
-            {notice.kind === 'closed'
-              ? t.closed
-              : (notice.unsaved ? t.closingUnsaved : t.closingSoon)(Math.max(1, Math.ceil(notice.in / 60_000)))}
+            {notice.reason === 'room'
+              ? t.closedForRoom(notice.after ?? 0, dirty.current && draftsSent.current)
+              : notice.reason === 'time'
+                ? config.restricted
+                  ? t.trialOver
+                  : t.timeOver
+                : t.closed}
           </p>
-          {notice.kind === 'closing' ? (
-            <button
-              type="button"
-              class="btn"
-              onClick={() => {
-                setNotice(null)
-                beat.current(true)
-              }}
-            >
-              {t.stay}
-            </button>
-          ) : (
-            <button type="button" class="btn" onClick={() => (notice.home ? location.assign(notice.home) : location.reload())}>
-              {t.reopen}
-            </button>
-          )}
+          <button type="button" class="btn" onClick={() => (notice.home ? location.assign(notice.home) : location.reload())}>
+            {notice.reason === 'time' && notice.home ? t.backTo(new URL(notice.home).host) : t.reopen}
+          </button>
         </div>
       )}
 

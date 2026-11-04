@@ -2,11 +2,48 @@ import { useState } from 'preact/hooks'
 import { api, ApiError } from './api.ts'
 import { t } from './i18n.ts'
 
-/** Without `onClose` there is nothing to go back to: the prompt stays until the code is given. */
-export function Login({ onSuccess, onClose }: { onSuccess: () => void; onClose?: () => void }) {
+/**
+ * A site lent in turn opens with no code: whoever arrives without their ticket, or with one already used, is pointed
+ * back to where turns are given.
+ */
+function InTurn({ home, spent, onClose }: { home?: string; spent: boolean; onClose?: () => void }) {
+  const host = home ? new URL(home).host : null
+  return (
+    <>
+      <div class="scrim" />
+      <div class="panel is-centered is-narrow" role="dialog" aria-label={t.editThisSite}>
+        <header class="panel-head">
+          <div>
+            <h2 class="panel-title">{t.editThisSite}</h2>
+            <p class="panel-context">{spent ? t.ticketSpent : t.inTurn}</p>
+          </div>
+          {onClose && <button type="button" class="close" aria-label={t.close} onClick={onClose} />}
+        </header>
+        {host && (
+          <>
+            <p class="note">{t.askTurn(host)}</p>
+            <footer class="panel-foot">
+              <a class="btn is-primary" href={home}>
+                {t.goTo(host)}
+              </a>
+            </footer>
+          </>
+        )}
+      </div>
+    </>
+  )
+}
+
+/**
+ * Without `onClose` there is nothing to go back to: the prompt stays until the code is given. With `turn`, the code
+ * opens nothing here: see `InTurn`.
+ */
+export function Login({ onSuccess, onClose, turn }: { onSuccess: () => void; onClose?: () => void; turn?: { home?: string; spent: boolean } }) {
   const [code, setCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  if (turn) return <InTurn {...turn} onClose={onClose} />
 
   const submit = async () => {
     if (busy || !code.trim()) return

@@ -16,7 +16,7 @@ import {
   withSlugs,
 } from '@foliome/core'
 import { useEffect, useRef, useState } from 'preact/hooks'
-import { api, explain } from './api.ts'
+import { api, type DraftOut, type Drafts, explain } from './api.ts'
 import { FieldList, type FieldContext, pageLocale } from './fields.tsx'
 import { t } from './i18n.ts'
 import { useFollow } from './zones.ts'
@@ -41,6 +41,12 @@ interface Props {
    * when the page already shows the change (see `foliome:preview`) and needs no reload.
    */
   onSaved: (message: string, goto?: string, live?: boolean) => void
+  /** Unsaved changes kept from an earlier visit, by field path. */
+  drafts: Drafts
+  /** What the panel holds unsaved right now, field by field, sent to the server with the editor's signs of life. */
+  onDraft: (drafts: DraftOut[]) => void
+  /** The artist lets drafts go, or they no longer differ from what is stored. */
+  onDropDrafts: (paths: string[]) => void
 }
 
 /** What a panel edits: a set of fields hanging from one place in the content. */
@@ -126,7 +132,7 @@ function resolve(schema: Schema, content: Doc, open: Open, createType: string | 
 
 type Side = 'right' | 'left' | 'below' | 'above' | 'dock'
 
-export function Panel({ schema, content, open, nudge, onDirty, onClose, onOpen, onSaved }: Props) {
+export function Panel({ schema, content, open, nudge, onDirty, onClose, onOpen, onSaved, drafts, onDraft, onDropDrafts }: Props) {
   const createList = open.kind === 'create' ? schema.content[open.list] : undefined
   const createTypes = createList?.type === 'list' && createList.types ? Object.entries(createList.types) : []
   const [createType, setCreateType] = useState(createTypes[0]?.[0])
@@ -153,6 +159,32 @@ export function Panel({ schema, content, open, nudge, onDirty, onClose, onOpen, 
     onDirty(dirty)
     return () => onDirty(false)
   }, [dirty])
+
+  // A new item has no place in the content yet: only changes to what exists are kept as drafts.
+  const pathOf = (name: string) => (form?.prefix ? `${form.prefix}.${name}` : name)
+  useEffect(() => {
+    onDraft(open.kind === 'create' ? [] : changed.map((name) => ({ path: pathOf(name), value: draft[name] })))
+  }, [draft, initial])
+  useEffect(() => () => onDraft([]), [])
+
+  // Changes left unsaved last time, in the fields this panel shows: offered back, unless they are what is stored now.
+  const [offered, setOffered] = useState(() => {
+    if (open.kind === 'create' || !form) return null
+    const values: Record<string, unknown> = {}
+    let at = 0
+    for (const name of Object.keys(form.fields)) {
+      const kept = drafts[pathOf(name)]
+      if (!kept || same(kept.value, initial[name])) continue
+      values[name] = kept.value
+      at = Math.max(at, kept.at)
+    }
+    return Object.keys(values).length ? { values, at } : null
+  })
+  useEffect(() => {
+    if (open.kind === 'create' || !form) return
+    const stale = Object.keys(form.fields).filter((name) => drafts[pathOf(name)] && same(drafts[pathOf(name)]!.value, initial[name]))
+    if (stale.length) onDropDrafts(stale.map(pathOf))
+  }, [])
 
   // The site may show some changes while they are being made, a colour or a light for instance: each draft value is
   // sent to it as a `foliome:preview` event, and it calls preventDefault() on the ones it applied. Those need no
@@ -349,6 +381,32 @@ export function Panel({ schema, content, open, nudge, onDirty, onClose, onOpen, 
           }}
         >
           <div class="panel-body">
+            {offered && !step && (
+              <div class="draft" role="status">
+                <p>{t.restoreDraft(t.moment(offered.at))}</p>
+                <button
+                  type="button"
+                  class="btn"
+                  onClick={() => {
+                    onDropDrafts(Object.keys(offered.values).map(pathOf))
+                    setOffered(null)
+                  }}
+                >
+                  {t.ignore}
+                </button>
+                <button
+                  type="button"
+                  class="btn is-primary"
+                  onClick={() => {
+                    setDraft((current) => ({ ...current, ...offered.values }))
+                    setOffered(null)
+                  }}
+                >
+                  {t.restore}
+                </button>
+              </div>
+            )}
+
             {step && (
               <button type="button" class="back" disabled={uploading > 0} onClick={() => setSteps((all) => all.slice(0, -1))}>
                 <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">

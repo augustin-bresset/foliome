@@ -7,10 +7,13 @@ const BASE = '/_foliome'
 export class ApiError extends Error {
   status: number
   code: string
-  constructor(status: number, code: string) {
+  /** For a file refused for its size: the limit it went over. */
+  maxBytes?: number
+  constructor(status: number, code: string, maxBytes?: number) {
     super(code)
     this.status = status
     this.code = code
+    this.maxBytes = maxBytes
   }
 }
 
@@ -26,8 +29,8 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   } catch {
     throw new ApiError(0, 'network')
   }
-  const data = (await res.json().catch(() => ({}))) as { error?: string }
-  if (!res.ok) throw new ApiError(res.status, data.error ?? 'error')
+  const data = (await res.json().catch(() => ({}))) as { error?: string; maxBytes?: number }
+  if (!res.ok) throw new ApiError(res.status, data.error ?? 'error', data.maxBytes)
   return data as T
 }
 
@@ -38,13 +41,35 @@ export interface SiteConfig {
   publish: boolean
   /** What the server converts on arrival, so the editor does not refuse it. */
   converts: { heic: boolean; tiff: boolean }
+  /** Largest file the server takes, in bytes. */
+  maxFileSize?: number
+  /** Lent to strangers in turn: nothing done here is kept after them. */
+  restricted?: boolean
 }
 
-/** What the server has to say about the session: that it is about to close for want of activity, or has closed. */
-export type Notice = { kind: 'closing'; in: number; unsaved: boolean } | { kind: 'closed'; home?: string } | null
+/**
+ * What the server has to say about the session: that it is about to close, has closed, or may close at any moment
+ * now without another word (`standby`). The reason is nothing done for a while (`idle`, the default), room needed for
+ * another artist (`room`), or the time granted being over (`time`).
+ */
+export type Notice =
+  | { kind: 'closing'; in: number; unsaved: boolean; reason?: 'idle' | 'time' }
+  | { kind: 'closed'; home?: string; reason?: 'idle' | 'room' | 'time'; after?: number }
+  | { kind: 'standby'; reason: 'room'; after: number; home?: string }
+  | null
+
+/** A field's unsaved value, as sent to the server while a panel holds it. */
+export interface DraftOut {
+  path: string
+  value: unknown
+}
+
+/** A draft kept on the server, and when it was last changed. */
+export type Drafts = Record<string, { value: unknown; at: number }>
 
 export const api = {
-  session: () => call<{ editor: boolean }>('GET', '/session'),
+  /** `code` false: the code opens nothing here, only a ticket handed out at `home` does. */
+  session: () => call<{ editor: boolean; code?: boolean; home?: string }>('GET', '/session'),
   login: (code: string) => call<{ ok: true }>('POST', '/login', { code }),
   logout: () => call<{ ok: true }>('POST', '/logout', {}),
   config: () => call<SiteConfig>('GET', '/config'),
@@ -52,7 +77,15 @@ export const api = {
   ops: (ops: Op[]) => call<{ ok: true }>('POST', '/ops', { ops }),
   undo: () => call<{ ok: boolean }>('POST', '/undo', {}),
   publish: () => call<{ ok: boolean; log: string }>('POST', '/publish', {}),
-  presence: (state: { dirty: boolean; active: boolean }) => call<{ notice: Notice }>('POST', '/presence', state),
+  presence: (state: { dirty: boolean; active: boolean; drafts?: DraftOut[] }) => call<{ notice: Notice }>('POST', '/presence', state),
+  drafts: () => call<{ drafts: Drafts }>('GET', '/drafts'),
+  dropDrafts: (paths: string[]) => call<{ ok: true }>('POST', '/drafts', { drop: paths }),
+}
+
+/** A size as the artist reads it: 15 Mo, 2 Go. */
+export function formatSize(bytes: number): string {
+  const [unit, size] = bytes >= 1024 ** 3 ? [t.gigabytes, bytes / 1024 ** 3] : [t.megabytes, bytes / 1024 ** 2]
+  return `${Number(size.toFixed(size < 10 ? 1 : 0)).toLocaleString(t.locale)} ${unit}`
 }
 
 /** What to tell the artist when a request fails. */
@@ -60,7 +93,8 @@ export function explain(err: unknown): string {
   const code = err instanceof ApiError ? err.code : ''
   if (code === 'network') return t.disconnected
   if (code === 'unauthorized') return t.expired
-  if (code === 'too_large') return t.tooLarge
+  if (code === 'too_large') return t.tooLarge(formatSize(err instanceof ApiError && err.maxBytes ? err.maxBytes : 2 * 1024 ** 3))
+  if (code === 'budget') return t.overBudget(formatSize(err instanceof ApiError && err.maxBytes ? err.maxBytes : 0))
   return t.saveFailed
 }
 
@@ -117,7 +151,15 @@ function measure(file: File): Promise<Measures> {
   return Promise.resolve({})
 }
 
+/** Largest file the server takes: filled in from the site's configuration, so a file too big is not sent for nothing. */
+let largest = Infinity
+
+export function setLargest(bytes: number | undefined): void {
+  largest = bytes ?? Infinity
+}
+
 export async function upload(file: File, onProgress: (ratio: number) => void): Promise<Asset> {
+  if (file.size > largest) throw new ApiError(413, 'too_large', largest)
   const query = new URLSearchParams({ name: file.name, ...(await measure(file)) })
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
@@ -127,14 +169,14 @@ export async function upload(file: File, onProgress: (ratio: number) => void): P
       if (e.lengthComputable) onProgress(e.loaded / e.total)
     }
     xhr.onload = () => {
-      let data: { asset?: Asset; error?: string } = {}
+      let data: { asset?: Asset; error?: string; maxBytes?: number } = {}
       try {
         data = JSON.parse(xhr.responseText)
       } catch {
         // Not JSON: treated as a failure below.
       }
       if (xhr.status === 200 && data.asset) resolve(data.asset)
-      else reject(new ApiError(xhr.status, data.error ?? 'error'))
+      else reject(new ApiError(xhr.status, data.error ?? 'error', data.maxBytes))
     }
     xhr.onerror = () => reject(new ApiError(0, 'network'))
     xhr.send(file)

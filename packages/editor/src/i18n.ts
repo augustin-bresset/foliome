@@ -2,7 +2,27 @@
 const preferred = navigator.languages.find((language) => /^(fr|en)\b/i.test(language))
 export const lang = preferred?.toLowerCase().startsWith('fr') ? 'fr' : 'en'
 
+/** A span of time still to come, in whole minutes, rounded up. */
+const minutesFr = (ms: number) => {
+  const minutes = Math.ceil(ms / 60_000)
+  return ms < 60_000 ? 'moins d’une minute' : minutes === 1 ? 'une minute' : `${minutes} minutes`
+}
+const minutesEn = (ms: number) => {
+  const minutes = Math.ceil(ms / 60_000)
+  return ms < 60_000 ? 'less than a minute' : minutes === 1 ? 'one minute' : `${minutes} minutes`
+}
+
 const fr = {
+  locale: 'fr',
+  megabytes: 'Mo',
+  gigabytes: 'Go',
+  // The day and time something happened: « 4 novembre à 18 h 12 ».
+  moment: (at: number) => {
+    const date = new Date(at)
+    const day = new Intl.DateTimeFormat('fr', { day: 'numeric', month: 'long' }).format(date)
+    return `${day} à ${date.getHours()} h ${String(date.getMinutes()).padStart(2, '0')}`
+  },
+
   // The bar
   openPage: 'Ouvrir la page',
   undone: 'Dernière modification annulée',
@@ -28,6 +48,13 @@ const fr = {
   stay: 'Continuer',
   closed: 'L’édition s’est fermée faute d’activité. Ce qui était enregistré est conservé.',
   reopen: 'Rouvrir',
+  closedForRoom: (after: number, kept: boolean) =>
+    `L’édition s’est fermée après ${minutesFr(after)} sans activité, pour laisser la place à un autre artiste. ${kept ? 'Vos modifications non enregistrées sont gardées : elles vous seront proposées à votre retour.' : 'Ce qui était enregistré est conservé.'}`,
+  timeEnding: (left: number) => `Le temps d’édition se termine dans ${minutesFr(left)}. Pensez à enregistrer.`,
+  timeOver: 'Le temps d’édition est écoulé. Ce qui était enregistré est conservé.',
+  trialEnding: (left: number) => `L’essai se termine dans ${minutesFr(left)}.`,
+  trialOver: 'L’essai est terminé. Merci d’avoir pris le temps d’essayer\u202f!',
+  backTo: (host: string) => `Retour sur ${host}`,
 
   // Signing in
   badCode: 'Ce code n’est pas le bon. Vérifiez-le et réessayez.',
@@ -37,6 +64,15 @@ const fr = {
   enterCode: 'Saisissez le code d’accès donné par votre développeur.',
   accessCode: 'Code d’accès',
   enter: 'Entrer',
+  ticketSpent: 'Ce lien d’accès a déjà servi, ou son temps est passé.',
+  inTurn: 'Ce site s’ouvre à tour de rôle : chacun reçoit son lien d’accès quand vient son tour.',
+  askTurn: (host: string) => `Demandez votre tour sur ${host}.`,
+  goTo: (host: string) => `Aller sur ${host}`,
+
+  // Unsaved changes kept from an earlier visit
+  restoreDraft: (when: string) => `Reprendre les modifications non enregistrées du ${when}\u202f?`,
+  restore: 'Reprendre',
+  ignore: 'Ignorer',
 
   // The panel
   unknownZone: 'Zone inconnue',
@@ -98,11 +134,23 @@ const fr = {
   // Failures
   disconnected: 'La connexion avec l’ordinateur qui héberge le site est coupée. Vérifiez votre connexion puis réessayez.',
   expired: 'Votre accès a expiré. Rechargez la page et saisissez à nouveau le code.',
-  tooLarge: 'Ce fichier dépasse la taille maximale de 2 Go.',
+  tooLarge: (size: string) => `Ce fichier dépasse la taille maximale de ${size}.`,
+  overBudget: (size: string) => `Les fichiers envoyés pendant cette session ne peuvent dépasser ${size} en tout, et la limite est atteinte.`,
   saveFailed: 'L’enregistrement a échoué. Réessayez ; si cela continue, prévenez votre développeur.',
 }
 
 const en: typeof fr = {
+  locale: 'en',
+  megabytes: 'MB',
+  gigabytes: 'GB',
+  // « 4 November at 6:12 pm »
+  moment: (at) => {
+    const date = new Date(at)
+    const day = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long' }).format(date)
+    const hours = date.getHours() % 12 || 12
+    return `${day} at ${hours}:${String(date.getMinutes()).padStart(2, '0')} ${date.getHours() < 12 ? 'am' : 'pm'}`
+  },
+
   openPage: 'Open the page',
   undone: 'Last change undone',
   nothingToUndo: 'Nothing to undo',
@@ -126,6 +174,13 @@ const en: typeof fr = {
   stay: 'Keep editing',
   closed: 'Editing closed after a while with nothing happening. What was saved is kept.',
   reopen: 'Open again',
+  closedForRoom: (after, kept) =>
+    `Editing closed after ${minutesEn(after)} with nothing happening, to make room for another artist. ${kept ? 'Your unsaved changes are kept: you will be offered them when you come back.' : 'What was saved is kept.'}`,
+  timeEnding: (left) => `Editing time ends in ${minutesEn(left)}. Remember to save.`,
+  timeOver: 'Editing time is over. What was saved is kept.',
+  trialEnding: (left) => `The trial ends in ${minutesEn(left)}.`,
+  trialOver: 'The trial is over. Thank you for taking the time to try it!',
+  backTo: (host) => `Back to ${host}`,
 
   badCode: 'That code is not right. Check it and try again.',
   tooMany: 'Too many tries. Wait five minutes before trying again.',
@@ -134,6 +189,14 @@ const en: typeof fr = {
   enterCode: 'Enter the access code your developer gave you.',
   accessCode: 'Access code',
   enter: 'Enter',
+  ticketSpent: 'This access link has already been used, or its time is up.',
+  inTurn: 'This site opens in turn: each visitor gets their own access link when their turn comes.',
+  askTurn: (host) => `Ask for your turn on ${host}.`,
+  goTo: (host) => `Go to ${host}`,
+
+  restoreDraft: (when) => `Pick up the unsaved changes from ${when}?`,
+  restore: 'Pick up',
+  ignore: 'Ignore',
 
   unknownZone: 'Unknown area',
   unknownZoneHelp: (path) => `This area is not described in the site’s configuration${path ? ` (${path})` : ''}. Tell your developer.`,
@@ -192,7 +255,8 @@ const en: typeof fr = {
 
   disconnected: 'The connection to the computer hosting the site was lost. Check your connection and try again.',
   expired: 'Your access has expired. Reload the page and enter the code again.',
-  tooLarge: 'This file is over the 2 GB limit.',
+  tooLarge: (size) => `This file is over the ${size} limit.`,
+  overBudget: (size) => `Files sent during this session may not add up to more than ${size}, and that limit is reached.`,
   saveFailed: 'Saving failed. Try again; if it keeps happening, tell your developer.',
 }
 

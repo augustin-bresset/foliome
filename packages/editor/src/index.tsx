@@ -1,5 +1,5 @@
 import { render } from 'preact'
-import { api, setConversions } from './api.ts'
+import { api, setConversions, setLargest } from './api.ts'
 import { App } from './App.tsx'
 import { lang } from './i18n.ts'
 import { Login } from './Login.tsx'
@@ -42,20 +42,24 @@ async function boot() {
     delete document.documentElement.dataset.foliomeMode
   }
 
-  const start = async () => {
-    const [config, initial] = await Promise.all([api.config(), api.content()])
+  const start = async (home?: string) => {
+    const [config, initial, drafts] = await Promise.all([api.config(), api.content(), api.drafts().then(({ drafts }) => drafts, () => ({}))])
     setConversions(config.converts)
+    setLargest(config.maxFileSize)
     localStorage.setItem(FLAG, '1')
     const quit = async () => {
       localStorage.removeItem(FLAG)
       await api.logout().catch(() => {})
       close()
     }
-    render(<App host={host} config={config} initial={initial} onQuit={quit} />, root)
+    render(<App host={host} config={config} initial={initial} drafts={drafts} home={home} onQuit={quit} />, root)
   }
 
   if (code) await api.login(code).catch(() => {})
-  const { editor } = await api.session()
+  const { editor, code: byCode = true, home } = await api.session()
+  // Where the code opens nothing, whoever has no session is sent back to where turns are given; the door page says
+  // whether they came with a ticket already used.
+  const turn = byCode ? undefined : { home, spent: document.documentElement.dataset.foliomeDoor === 'ticket' }
   // At the door there is no site behind the prompt yet, only the page that asks for the code. Once in, the page that
   // was asked for is loaded, with the editor on it.
   if (document.documentElement.hasAttribute('data-foliome-door')) {
@@ -65,11 +69,11 @@ async function boot() {
       location.replace(url)
     }
     if (editor) enter()
-    else render(<Login onSuccess={enter} />, root)
+    else render(<Login onSuccess={enter} turn={turn} />, root)
     return
   }
-  if (editor) await start()
-  else render(<Login onSuccess={start} onClose={close} />, root)
+  if (editor) await start(home)
+  else render(<Login onSuccess={start} onClose={close} turn={turn} />, root)
 }
 
 boot().catch((err) => console.error('foliome:', err))

@@ -537,6 +537,27 @@ button:disabled {
   padding: 14px 16px 16px;
 }
 
+/* Unsaved changes from an earlier visit, offered back at the top of the panel. */
+.draft {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: #fdeaf3;
+  font-size: 13px;
+}
+
+.draft {
+  justify-content: flex-end;
+}
+
+.draft p {
+  flex-basis: 100%;
+  margin: 0;
+}
+
 .nudge {
   margin: 0 auto 0 0;
   color: var(--guide-deep);
@@ -560,6 +581,11 @@ button:disabled {
 
 .btn:hover:not(:disabled) {
   background: var(--fog);
+}
+
+a.btn {
+  color: inherit;
+  text-decoration: none;
 }
 
 .btn:disabled {
