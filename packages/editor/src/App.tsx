@@ -1,7 +1,7 @@
 import { type Doc, resolvePath, type Schema } from '@foliome/core'
 import { useEffect, useRef, useState } from 'preact/hooks'
-import { api, type DraftOut, type Drafts, explain, type Notice, type SiteConfig } from './api.ts'
-import { t } from './i18n.ts'
+import { api, type DraftOut, type Drafts, explain, type Notice, type SiteConfig, type Text } from './api.ts'
+import { lang, t } from './i18n.ts'
 import { type Open, Panel } from './Panel.tsx'
 import { useFollow, zoneAt } from './zones.ts'
 
@@ -11,8 +11,6 @@ interface Props {
   initial: { content: Doc; canUndo: boolean }
   /** Unsaved changes kept on the server from an earlier visit. */
   drafts: Drafts
-  /** Where whoever lent this session sends people back to, if anywhere. */
-  home?: string
   onQuit: () => void
 }
 
@@ -60,14 +58,10 @@ function Outline(props: { el: HTMLElement; active?: boolean; label?: string; lin
   )
 }
 
-/** What to show when the server no longer answers, given what it said last. */
-function closedAfter(last: Notice, home: string | undefined): Notice {
-  if (last?.kind === 'closing') return { kind: 'closed', reason: last.reason ?? 'idle', home }
-  if (last?.kind === 'standby') return { kind: 'closed', reason: last.reason, after: last.after, home: last.home ?? home }
-  return null
-}
+/** The artist's own words, of those the host gave. */
+const say = (text: Text) => (typeof text === 'string' ? text : (text[lang] ?? Object.values(text)[0] ?? ''))
 
-export function App({ host, config, initial: loaded, drafts: keptBefore, home, onQuit }: Props) {
+export function App({ host, config, initial: loaded, drafts: keptBefore, onQuit }: Props) {
   // The stored content, fetched again after a save the page showed live (no reload to bring it).
   const [initial, setInitial] = useState(loaded)
   const { schema } = config
@@ -80,8 +74,8 @@ export function App({ host, config, initial: loaded, drafts: keptBefore, home, o
   const [toast, setToast] = useState<string | null>(() => take('foliome:toast'))
   const [busy, setBusy] = useState<'undo' | 'publish' | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
-  const [notice, setNotice] = useState<Notice>(null)
-  // When the notice came: a closing time is counted down from it between signs of life.
+  const [notice, setNotice] = useState<Notice | null>(null)
+  // When the notice came: its countdown runs from then between signs of life.
   const [noticeAt, setNoticeAt] = useState(0)
   const [, tick] = useState(0)
   const [kept, setKept] = useState(keptBefore)
@@ -93,8 +87,6 @@ export function App({ host, config, initial: loaded, drafts: keptBefore, home, o
   const following = useRef(false)
   /** What the open panel holds unsaved, sent with each sign of life. */
   const outgoing = useRef<DraftOut[]>([])
-  /** Whether the server has the drafts the open panel holds: if the session closes, they are not lost. */
-  const draftsSent = useRef(false)
 
   const dropDrafts = (paths: string[]) => {
     if (paths.length === 0) return
@@ -106,7 +98,6 @@ export function App({ host, config, initial: loaded, drafts: keptBefore, home, o
     // Closing a panel lets go of what it held: the artist chose not to keep it.
     dropDrafts(outgoing.current.map((draft) => draft.path))
     outgoing.current = []
-    draftsSent.current = false
     setOpen(next)
     setPanelKey((k) => k + 1)
     setMenu(false)
@@ -189,12 +180,12 @@ export function App({ host, config, initial: loaded, drafts: keptBefore, home, o
   }, [])
 
   // A sign of life every half minute, saying whether the artist did anything and whether a panel holds unsaved
-  // changes, which it carries as drafts. On a shared server it keeps the session open while it is used, and brings
-  // back the warning before it closes.
+  // changes, which it carries as drafts. It brings back what the host running the server has to say, if anything.
   const beat = useRef<(active: boolean) => void>(() => {})
   useEffect(() => {
     let active = false
-    let last: Notice = null
+    /** What the host asked to show should the session end without another word. */
+    let farewell: Notice | null = null
     let closed = false
     const mark = () => {
       active = true
@@ -206,22 +197,20 @@ export function App({ host, config, initial: loaded, drafts: keptBefore, home, o
       active = false
       const drafts = outgoing.current
       api.presence({ dirty: dirty.current, active: now, ...(drafts.length ? { drafts } : {}) }).then(
-        ({ notice }) => {
-          draftsSent.current = drafts.length > 0 && drafts === outgoing.current
-          last = notice
-          closed = notice?.kind === 'closed'
-          // Nothing to show yet: it only says why, should the session close without another word.
-          setNotice(notice?.kind === 'standby' ? null : notice)
+        (reply) => {
+          farewell = reply.farewell ?? null
+          closed = reply.notice?.final === true
+          setNotice(reply.notice)
           setNoticeAt(Date.now())
         },
-        // Unanswered after the server said it would close: it has. Asked once more, so a lost connection is not taken
-        // for it.
+        // Unanswered once the host said what to show if the session ended: it has. Asked once more, so a lost
+        // connection is not taken for it.
         () => {
-          const fallback = closedAfter(last, home)
-          if (!fallback) return
+          const last = farewell
+          if (!last) return
           const close = () => {
             closed = true
-            setNotice(fallback)
+            setNotice(last)
           }
           api.session().then(({ editor }) => !editor && close(), close)
         },
@@ -242,7 +231,7 @@ export function App({ host, config, initial: loaded, drafts: keptBefore, home, o
 
   // The time left, counted down between two signs of life.
   useEffect(() => {
-    if (notice?.kind !== 'closing') return
+    if (notice?.in === undefined) return
     const timer = setInterval(() => tick((n) => n + 1), 5000)
     return () => clearInterval(timer)
   }, [notice])
@@ -419,42 +408,24 @@ export function App({ host, config, initial: loaded, drafts: keptBefore, home, o
         </button>
       </div>
 
-      {notice?.kind === 'closing' && (
-        <div class="notice" role="alert">
-          {notice.reason === 'time' ? (
-            // Time granted runs out whatever the artist does: nothing to put off.
-            <p>{(config.restricted ? t.trialEnding : t.timeEnding)(Math.max(0, notice.in - (Date.now() - noticeAt)))}</p>
-          ) : (
-            <>
-              <p>{(notice.unsaved ? t.closingUnsaved : t.closingSoon)(Math.max(1, Math.ceil((notice.in - (Date.now() - noticeAt)) / 60_000)))}</p>
-              <button
-                type="button"
-                class="btn"
-                onClick={() => {
-                  setNotice(null)
-                  beat.current(true)
-                }}
-              >
-                {t.stay}
-              </button>
-            </>
-          )}
-        </div>
-      )}
-      {notice?.kind === 'closed' && (
-        <div class="notice" role="alert">
-          <p>
-            {notice.reason === 'room'
-              ? t.closedForRoom(notice.after ?? 0, dirty.current && draftsSent.current)
-              : notice.reason === 'time'
-                ? config.restricted
-                  ? t.trialOver
-                  : t.timeOver
-                : t.closed}
-          </p>
-          <button type="button" class="btn" onClick={() => (notice.home ? location.assign(notice.home) : location.reload())}>
-            {notice.reason === 'time' && notice.home ? t.backTo(new URL(notice.home).host) : t.reopen}
-          </button>
+      {notice && (
+        <div class="notice" role="alert" data-level={notice.level ?? 'info'}>
+          <p>{say(notice.text).replaceAll('{countdown}', t.timeLeft(Math.max(0, (notice.in ?? 0) - (Date.now() - noticeAt))))}</p>
+          {notice.actions?.map((action) => (
+            <button
+              type="button"
+              class="btn"
+              onClick={() => {
+                if (action.href) return location.assign(action.href)
+                if (action.do === 'reload') return location.reload()
+                // Put away: the artist is there, and the server hears it at once.
+                setNotice(null)
+                beat.current(true)
+              }}
+            >
+              {say(action.label)}
+            </button>
+          ))}
         </div>
       )}
 

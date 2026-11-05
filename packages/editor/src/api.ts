@@ -47,16 +47,22 @@ export interface SiteConfig {
   restricted?: boolean
 }
 
+/** Words for the artist: one text, or one per language, of which the editor shows the artist's own. */
+export type Text = string | Record<string, string>
+
 /**
- * What the server has to say about the session: that it is about to close, has closed, or may close at any moment
- * now without another word (`standby`). The reason is nothing done for a while (`idle`, the default), room needed for
- * another artist (`room`), or the time granted being over (`time`).
+ * What the host running this server has to tell the artist, shown as it is given. `in` is the time left on its
+ * countdown, which `{countdown}` in the text shows; `final` says the session is over; `untilActive`, that doing anything
+ * puts it away.
  */
-export type Notice =
-  | { kind: 'closing'; in: number; unsaved: boolean; reason?: 'idle' | 'time' }
-  | { kind: 'closed'; home?: string; reason?: 'idle' | 'room' | 'time'; after?: number }
-  | { kind: 'standby'; reason: 'room'; after: number; home?: string }
-  | null
+export interface Notice {
+  text: Text
+  level?: 'info' | 'warning' | 'error'
+  in?: number
+  actions?: { label: Text; do?: 'dismiss' | 'reload'; href?: string }[]
+  final?: boolean
+  untilActive?: boolean
+}
 
 /** A field's unsaved value, as sent to the server while a panel holds it. */
 export interface DraftOut {
@@ -77,7 +83,8 @@ export const api = {
   ops: (ops: Op[]) => call<{ ok: true }>('POST', '/ops', { ops }),
   undo: () => call<{ ok: boolean }>('POST', '/undo', {}),
   publish: () => call<{ ok: boolean; log: string }>('POST', '/publish', {}),
-  presence: (state: { dirty: boolean; active: boolean; drafts?: DraftOut[] }) => call<{ notice: Notice }>('POST', '/presence', state),
+  /** With what the host says now, and what to show should the session end without another word. */
+  presence: (state: { dirty: boolean; active: boolean; drafts?: DraftOut[] }) => call<{ notice: Notice | null; farewell?: Notice | null }>('POST', '/presence', state),
   drafts: () => call<{ drafts: Drafts }>('GET', '/drafts'),
   dropDrafts: (paths: string[]) => call<{ ok: true }>('POST', '/drafts', { drop: paths }),
 }

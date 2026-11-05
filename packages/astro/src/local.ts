@@ -39,23 +39,38 @@ export interface LocalOptions {
   /** Called after every stored change. */
   onChange: () => void
   /**
-   * Shared with the door that wakes and closes the editing servers of a machine: it asks with this key how this one is
-   * used, and leaves notices for the artist. Unset, nobody can ask.
+   * Shared with the host that runs this editing server, when there is one: it asks with this key how the server is
+   * used, hands out sessions and speaks to the artists through `/_foliome/host` (see `HostStatus` and `HostNotice`).
+   * Unset, nobody can ask.
    */
-  doorKey?: string
+  hostKey?: string
   /** Largest file the artist may send, in bytes. Unset: 2 GB. */
   maxFileSize?: number
   /**
    * For a site lent to strangers, a public demo for instance. Nobody enters with the access code, only through a
-   * one-time ticket the door hands out, for a session as long as the door decided. Nothing is published, pages are
+   * one-time ticket the host hands out, for a session as long as the host decided. Nothing is published, pages are
    * kept out of search engines, and `mediaBudget` bytes of files may be sent in a session, in all.
    */
   restricted?: { mediaBudget?: number }
 }
 
-/** How this editing server is being used, as the door sees it. */
-export interface Presence {
-  /** Milliseconds since the artist last did anything. */
+/** One editor open on this server, as the host sees it. */
+export interface HostSession {
+  /** Stands for the session in what the host says to it. `local` is the developer's own browser. */
+  id: string
+  /** Milliseconds since its editor last gave a sign of life. */
+  seen: number
+  /** Milliseconds since the artist last did anything in it. */
+  idle: number
+  /** Its panel holds changes not saved yet. */
+  dirty: boolean
+  /** Whatever it holds unsaved has reached this server as rescue drafts. */
+  drafted: boolean
+}
+
+/** How this editing server is being used, for the host: `GET /_foliome/host`. */
+export interface HostStatus {
+  /** Milliseconds since the artist last did anything, in any session. */
   idle: number
   /** An open panel holds changes the artist has not saved. */
   dirty: boolean
@@ -65,18 +80,46 @@ export interface Presence {
   busy: boolean
   /** Every unsaved change an open editor holds has reached this server as a draft: closing would lose nothing. */
   drafted: boolean
+  /** Files being sent right now. */
+  uploads: number
+  /** The site is being put online. */
+  publishing: boolean
+  sessions: HostSession[]
+}
+
+/** Words for the artist: one text, or one per language (`fr`, `en`…), of which the editor shows the artist's own. */
+export type HostText = string | Record<string, string>
+
+/** A button under a notice. Without `href` or `do`, it puts the notice away. */
+export interface HostAction {
+  label: HostText
+  /** `dismiss` puts the notice away and tells the server the artist is there; `reload` loads the page again. */
+  do?: 'dismiss' | 'reload'
+  /** Goes there instead. */
+  href?: string
 }
 
 /**
- * What the door has to say to the artist, through the editor. `reason` says why: nothing done for a while (`idle`, the
- * default), room needed for someone else (`room`), or the time granted is over (`time`).
+ * Anything the host has to tell the artists, shown by the editor as it is given: Foliome gives it no meaning of its
+ * own. Sent to every editor or to one session, at `POST /_foliome/host/notice`.
  */
-export type Notice =
-  /** The session closes at `at`. */
-  | { kind: 'closing'; at: number; unsaved: boolean; reason?: 'idle' | 'time' }
-  | { kind: 'closed'; home?: string; reason?: 'idle' | 'room' | 'time'; after?: number }
-  /** Nothing to show yet: the session may close at any moment now, after `after` ms left alone, with no other warning. */
-  | { kind: 'standby'; reason: 'room'; after: number; home?: string }
+export interface HostNotice {
+  text: HostText
+  /** How it looks. `info` unless said. */
+  level?: 'info' | 'warning' | 'error'
+  /** A countdown, in milliseconds from now: `{countdown}` in the text shows the time left, kept up to date. */
+  in?: number
+  actions?: HostAction[]
+  /** The session is over: the editor stops asking the server anything, and shows only this. */
+  final?: boolean
+  /** Goes away as soon as the artist does anything: a word about their absence, say. */
+  untilActive?: boolean
+}
+
+/** A notice as kept here: its countdown on this server's clock. */
+type Kept = Omit<HostNotice, 'in'> & { until?: number }
+/** What the host said to all, or to one session: shown now, and shown should the session end without another word. */
+type Said = { notice?: Kept | null; farewell?: Kept | null }
 
 /** The last thing an editor had not saved in a field, kept until it is saved or let go. */
 export interface Draft {
@@ -92,7 +135,7 @@ interface State {
   failures: Record<string, { count: number; resetAt: number }>
   /** Visitors who have signed in before: a flood of wrong codes from elsewhere does not shut them out. */
   known: string[]
-  /** Where the door that grants sessions sends people back to, given with its last grant. */
+  /** Where the host that grants sessions sends people back to, given with its last grant. */
   home?: string
 }
 
@@ -109,11 +152,15 @@ const TRIES = 8
 const TRIES_IN_ALL = 200
 const EVERYBODY = '*'
 const KNOWN_VISITORS = 50
+/** The developer's own browser, as a session. */
+const LOCAL = 'local'
 /** An editor gives a sign of life every thirty seconds: one missed is allowed. */
 const ALIVE = 75_000
-/** A ticket from the door is for someone being sent here right away. */
+/** A ticket from the host is for someone being sent here right away. */
 const TICKET_LIFE = 2 * 60_000
 const LONGEST_SESSION = SESSION_DAYS * 86_400_000
+/** A closed session is told so if its editor calls in within a day. */
+const ENDED_LIFE = 86_400_000
 const DRAFT_PATH = /^[\w-]+(\.[\w-]+)*$/
 /** What one sign of life may bring as drafts, in all: far more than any text typed by hand. */
 const DRAFTS_SIZE = 512 * 1024
@@ -169,6 +216,39 @@ async function loadDrafts(file: string): Promise<Record<string, Draft>> {
 
 /** Whether a change at `changed` replaces what was drafted at `drafted`: the same field, one inside it, or around it. */
 const overlaps = (changed: string, drafted: string) => changed === drafted || drafted.startsWith(`${changed}.`) || changed.startsWith(`${drafted}.`)
+
+const LEVELS = new Set(['info', 'warning', 'error'])
+const DOES = new Set(['dismiss', 'reload'])
+const LONGEST_TEXT = 2000
+const isText = (text: unknown): text is HostText =>
+  typeof text === 'string'
+    ? text.length <= LONGEST_TEXT
+    : typeof text === 'object' && text !== null && !Array.isArray(text) && Object.keys(text).length > 0 && Object.values(text).every((one) => typeof one === 'string' && one.length <= LONGEST_TEXT)
+const isAction = (action: unknown): action is HostAction => {
+  if (typeof action !== 'object' || action === null) return false
+  const { label, do: does, href } = action as Record<string, unknown>
+  return isText(label) && (does === undefined || DOES.has(String(does))) && (href === undefined || (typeof href === 'string' && /^https?:\/\//.test(href)))
+}
+
+/** A notice from the host as it is kept, `null` to say nothing, or `undefined` for one that is not a notice. */
+function keep(given: unknown): Kept | null | undefined {
+  if (given === null) return null
+  if (typeof given !== 'object' || Array.isArray(given)) return undefined
+  const { text, level, in: left, actions, final, untilActive } = given as Record<string, unknown>
+  if (!isText(text)) return undefined
+  if (level !== undefined && !LEVELS.has(String(level))) return undefined
+  if (left !== undefined && (typeof left !== 'number' || !Number.isFinite(left) || left < 0)) return undefined
+  if (actions !== undefined && (!Array.isArray(actions) || actions.length > 4 || !actions.every(isAction))) return undefined
+  if ((final !== undefined && typeof final !== 'boolean') || (untilActive !== undefined && typeof untilActive !== 'boolean')) return undefined
+  return {
+    text,
+    ...(level ? { level: level as HostNotice['level'] } : {}),
+    ...(left !== undefined ? { until: Date.now() + left } : {}),
+    ...(actions ? { actions: (actions as HostAction[]).map(({ label, do: does, href }) => ({ label, ...(does ? { do: does } : {}), ...(href ? { href } : {}) })) } : {}),
+    ...(final ? { final } : {}),
+    ...(untilActive ? { untilActive } : {}),
+  }
+}
 
 export async function createLocal(options: LocalOptions) {
   const dir = path.join(options.root, '.foliome')
@@ -230,7 +310,7 @@ export async function createLocal(options: LocalOptions) {
     return true
   }
 
-  // In a restricted session, what is sent counts against its budget, from the moment the door grants it.
+  // In a restricted session, what is sent counts against its budget, from the moment the host grants it.
   let mediaSpent = 0
 
   const tools = await detectTools()
@@ -299,34 +379,77 @@ export async function createLocal(options: LocalOptions) {
     return isThisMachine(req)
   }
 
-  // How the server is used, for the door. Kept in memory: a restart is a fresh start.
+  /** Stands for a session in what the host sees and says: a part of its hash, which leads nowhere by itself. */
+  const idOf = (hash: string) => hash.slice(0, 16)
+  /** The session a request comes from: its cookie's, valid or not, or the developer's own browser. */
+  const sessionOf = (req: IncomingMessage) => {
+    const token = parse(req.headers.cookie ?? '', COOKIE)[COOKIE]
+    if (token) return idOf(sha256(token))
+    return isThisMachine(req) ? LOCAL : null
+  }
+
+  // How the server is used, for the host. Kept in memory: a restart is a fresh start.
   let lastActivity = Date.now()
   let inFlight = 0
-  let notice: Notice | null = null
+  let uploads = 0
   /** Each open editor's last sign of life, by session, whether it held unsaved changes, and whether they came as drafts. */
   const editors = new Map<string, { at: number; dirty: boolean; drafted: boolean }>()
-  /** One-time tickets the door handed out, by hash: until when each may be used, and when its session will end. */
+  /** When the artist last did anything, by session. */
+  const activeAt = new Map<string, number>()
+  /** What the host said to every editor, and to some sessions alone, which then hear that instead. */
+  let toAll: Required<Said> = { notice: null, farewell: null }
+  const toOne = new Map<string, Said>()
+  /** Sessions the host closed, and what they are told when their editor next calls in. */
+  const ended = new Map<string, { notice: Kept | null; at: number }>()
+  /** One-time tickets the host handed out, by hash: until when each may be used, and when its session will end. */
   const tickets = new Map<string, { expires: number; until: number }>()
-  /** The artist did something: whatever the door was about to say about their absence no longer holds. Time granted still runs out. */
-  const touch = () => {
-    lastActivity = Date.now()
-    if ((notice?.kind === 'closing' && notice.reason !== 'time') || notice?.kind === 'standby') notice = null
+
+  /** The artist did something: whatever the host said until then about their absence no longer holds. */
+  const touch = (session: string | null) => {
+    const now = Date.now()
+    lastActivity = now
+    if (session) activeAt.set(session, now)
+    const awake = (said: Said) => {
+      if (said.notice?.untilActive) said.notice = null
+      if (said.farewell?.untilActive) said.farewell = null
+    }
+    awake(toAll)
+    const own = session && toOne.get(session)
+    if (own) awake(own)
   }
-  const presence = (): Presence => {
+  const status = (): HostStatus => {
     const now = Date.now()
     for (const [key, beat] of editors) if (now - beat.at > ALIVE) editors.delete(key)
+    const open = [...editors.entries()]
     return {
       idle: now - lastActivity,
-      dirty: [...editors.values()].some((beat) => beat.dirty),
+      dirty: open.some(([, beat]) => beat.dirty),
       editors: editors.size,
       busy: inFlight > 0 || publishing,
-      drafted: [...editors.values()].every((beat) => beat.drafted),
+      drafted: open.every(([, beat]) => beat.drafted),
+      uploads,
+      publishing,
+      sessions: open.map(([id, beat]) => ({ id, seen: now - beat.at, idle: now - (activeAt.get(id) ?? lastActivity), dirty: beat.dirty, drafted: beat.drafted })),
     }
   }
-  const fromDoor = (req: IncomingMessage) => {
-    if (!options.doorKey) return false
-    const given = Buffer.from(String(req.headers['x-foliome-door'] ?? ''))
-    const expected = Buffer.from(options.doorKey)
+  /** What a session is to be told: its own words if the host had any for it, else those for all. */
+  const heard = (session: string) => {
+    const own = toOne.get(session)
+    return {
+      notice: own && own.notice !== undefined ? own.notice : toAll.notice,
+      farewell: own && own.farewell !== undefined ? own.farewell : toAll.farewell,
+    }
+  }
+  /** The time left is counted here: the artist's clock may be wrong. */
+  const shown = (kept: Kept | null): HostNotice | null => {
+    if (!kept) return null
+    const { until, ...rest } = kept
+    return until === undefined ? rest : { ...rest, in: Math.max(0, until - Date.now()) }
+  }
+  const fromHost = (req: IncomingMessage) => {
+    if (!options.hostKey) return false
+    const given = Buffer.from(String(req.headers['x-foliome-host'] ?? ''))
+    const expected = Buffer.from(options.hostKey)
     return given.length === expected.length && timingSafeEqual(given, expected)
   }
 
@@ -366,23 +489,23 @@ export async function createLocal(options: LocalOptions) {
 
   // Whoever has not signed in is given one page, which asks for the code: the editor shows its prompt on it. Turned
   // away with a ticket that no longer opens anything, they are told so.
-  const doorPage = (why = '') =>
-    `<!doctype html><html lang="fr" data-foliome-door="${why}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><link rel="icon" href="data:,"><title>${escapeHtml(options.name)}</title><style>html{background:#f2f2f5}</style></head><body><script src="${API}/editor.js"></script></body></html>`
-  const door = (req: IncomingMessage, res: ServerResponse, why = '') => {
+  const signInPage = (why = '') =>
+    `<!doctype html><html lang="fr" data-foliome-signin="${why}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><link rel="icon" href="data:,"><title>${escapeHtml(options.name)}</title><style>html{background:#f2f2f5}</style></head><body><script src="${API}/editor.js"></script></body></html>`
+  const signIn = (req: IncomingMessage, res: ServerResponse, why = '') => {
     const page = req.method === 'GET' && (req.headers.accept ?? '').includes('text/html')
     res.writeHead(401, {
       'content-type': `${page ? 'text/html' : 'text/plain'}; charset=utf-8`,
       'cache-control': 'no-store',
       'x-robots-tag': 'noindex',
     })
-    res.end(page ? doorPage(why) : 'unauthorized')
+    res.end(page ? signInPage(why) : 'unauthorized')
   }
 
   /** Over the public address the cookie only ever travels encrypted. */
   const secureFor = (host: string | undefined) => options.address?.protocol === 'https:' && hostName(host) === options.address.hostname
 
   /**
-   * A ticket from the door, exchanged once for the session it was handed out for. The address is then cleaned of it,
+   * A ticket from the host, exchanged once for the session it was handed out for. The address is then cleaned of it,
    * so that it is neither kept in the history nor shown, and asks for the editor.
    */
   async function exchange(req: IncomingMessage, res: ServerResponse, url: URL, ticket: string) {
@@ -408,7 +531,7 @@ export async function createLocal(options: LocalOptions) {
       res.writeHead(303, { location: clean, 'cache-control': 'no-store' })
       return res.end()
     }
-    door(req, res, 'ticket')
+    signIn(req, res, 'ticket')
   }
 
   const app = new Hono<Env>().basePath(API)
@@ -432,7 +555,7 @@ export async function createLocal(options: LocalOptions) {
     await next()
   })
 
-  // Whether the code opens this site at all, and where the door that hands out sessions is, for whoever has none.
+  // Whether the code opens this site at all, and where the host that hands out sessions is, for whoever has none.
   app.get('/session', (c) => c.json({ editor: isEditor(c.env.incoming), code: !restricted, ...(restricted && state.home ? { home: state.home } : {}) }))
 
   app.post('/login', async (c) => {
@@ -472,20 +595,27 @@ export async function createLocal(options: LocalOptions) {
   })
 
   // Each open editor's sign of life, which tells whether the artist did anything since the last one. The answer
-  // carries what the door has to say: the time left is counted here, the artist's clock may be wrong.
-  // With unsaved changes it also carries them, as drafts: see `drafted` in the presence.
-  app.post('/presence', guard, async (c) => {
+  // carries what the host has to say to it: now, and should the session end without another word.
+  // With unsaved changes it also carries them, as drafts: see `drafted` in the host's status.
+  app.post('/presence', async (c, next) => {
+    // A session the host closed hears it once, and hands over what it held unsaved: nothing of it is lost.
+    const session = sessionOf(c.env.incoming)
+    const end = session && ended.get(session)
+    if (!end) return guard(c, next)
+    const body = (await c.req.json().catch(() => null)) as { drafts?: unknown } | null
+    keepDrafts(body?.drafts)
+    ended.delete(session)
+    return c.json({ notice: shown(end.notice), farewell: null })
+  })
+  app.post('/presence', async (c) => {
     const body = (await c.req.json().catch(() => null)) as { dirty?: unknown; active?: unknown; drafts?: unknown } | null
-    const token = getCookie(c, COOKIE)
+    const session = sessionOf(c.env.incoming) ?? LOCAL
     const dirty = body?.dirty === true
     const drafted = keepDrafts(body?.drafts)
-    editors.set(token ? sha256(token) : 'this machine', { at: Date.now(), dirty, drafted: !dirty || drafted })
-    if (body?.active === true) touch()
-    if (notice?.kind === 'closing') {
-      const { at, ...rest } = notice
-      return c.json({ notice: { ...rest, in: Math.max(0, at - Date.now()) } })
-    }
-    return c.json({ notice })
+    editors.set(session, { at: Date.now(), dirty, drafted: !dirty || drafted })
+    if (body?.active === true) touch(session)
+    const { notice, farewell } = heard(session)
+    return c.json({ notice: shown(notice), farewell: shown(farewell) })
   })
 
   // Drafts kept from earlier, offered back when the artist opens the same fields again; and let go of.
@@ -506,34 +636,88 @@ export async function createLocal(options: LocalOptions) {
     }
   })
 
-  // The door alone, with its key. To anyone else these do not exist.
-  app.get('/door', (c) => (fromDoor(c.env.incoming) ? c.json(presence()) : c.json({ error: 'not_found' }, 404)))
-  app.post('/door', async (c) => {
-    if (!fromDoor(c.env.incoming)) return c.json({ error: 'not_found' }, 404)
-    const body = (await c.req.json().catch(() => null)) as { notice?: Notice | null; grant?: { ms?: unknown; home?: unknown } } | null
-    if (body?.grant) {
-      // A session for whoever the door sends here next, for `ms`, entered through the ticket returned. Every other
-      // session ends: the site is theirs alone.
-      const ms = Number(body.grant.ms)
-      if (!Number.isFinite(ms) || ms <= 0 || ms > LONGEST_SESSION) return c.json({ error: 'invalid' }, 400)
-      const now = Date.now()
-      state.sessions = {}
-      tickets.clear()
-      editors.clear()
-      notice = null
-      mediaSpent = 0
-      const home = body.grant.home
-      if (typeof home === 'string' && /^https?:\/\//.test(home)) state.home = home
-      // A site lent to one stranger after another: nobody finds what the last one left unsaved.
-      if (restricted) dropDrafts(() => true)
-      await save()
-      const ticket = randomBytes(32).toString('base64url')
-      tickets.set(sha256(ticket), { expires: Math.min(now + TICKET_LIFE, now + ms), until: now + ms })
-      return c.json({ ticket })
+  // The host alone, with its key. To anyone else these do not exist.
+  const host = new Hono<Env>()
+  host.use(async (c, next) => {
+    if (!fromHost(c.env.incoming)) return c.json({ error: 'not_found' }, 404)
+    await next()
+  })
+  host.get('/', (c) => c.json(status()))
+
+  host.post('/grant', async (c) => {
+    // A session for whoever the host sends here next, for `ms`, entered through the ticket returned. Every other
+    // session ends: the site is theirs alone.
+    const body = (await c.req.json().catch(() => null)) as { ms?: unknown; home?: unknown } | null
+    const ms = Number(body?.ms)
+    if (!Number.isFinite(ms) || ms <= 0 || ms > LONGEST_SESSION) return c.json({ error: 'invalid' }, 400)
+    const now = Date.now()
+    state.sessions = {}
+    tickets.clear()
+    editors.clear()
+    activeAt.clear()
+    toAll = { notice: null, farewell: null }
+    toOne.clear()
+    ended.clear()
+    mediaSpent = 0
+    const home = body?.home
+    if (typeof home === 'string' && /^https?:\/\//.test(home)) state.home = home
+    // A site lent to one stranger after another: nobody finds what the last one left unsaved.
+    if (restricted) dropDrafts(() => true)
+    await save()
+    const ticket = randomBytes(32).toString('base64url')
+    tickets.set(sha256(ticket), { expires: Math.min(now + TICKET_LIFE, now + ms), until: now + ms })
+    return c.json({ ticket })
+  })
+
+  /** Whether a session the host names is one this server knows: signed in, or with an editor open. */
+  const known = (session: string) => editors.has(session) || Object.keys(state.sessions).some((hash) => idOf(hash) === session)
+
+  host.post('/notice', async (c) => {
+    const body = (await c.req.json().catch(() => null)) as { notice?: unknown; farewell?: unknown; to?: unknown } | null
+    const said: Said = {}
+    for (const field of ['notice', 'farewell'] as const) {
+      if (body?.[field] === undefined) continue
+      const kept = keep(body[field])
+      if (kept === undefined) return c.json({ error: 'invalid', field }, 400)
+      said[field] = kept
     }
-    notice = body?.notice ?? null
+    const to = body?.to
+    if (to !== undefined) {
+      if (typeof to !== 'string' || !known(to)) return c.json({ error: 'no_session' }, 404)
+      toOne.set(to, { ...toOne.get(to), ...said })
+      return c.json({ ok: true })
+    }
+    // Words for all replace whatever each session was told alone.
+    toAll = { ...toAll, ...said }
+    for (const own of toOne.values()) for (const field of Object.keys(said) as (keyof Said)[]) delete own[field]
     return c.json({ ok: true })
   })
+
+  host.post('/close', async (c) => {
+    // The session ends here and now. Its editor, when it next calls in, hands over what it holds unsaved as rescue
+    // drafts, and is told `notice`; until then, what it last sent is kept already.
+    const body = (await c.req.json().catch(() => null)) as { to?: unknown; notice?: unknown } | null
+    const to = body?.to
+    if (to !== undefined && (typeof to !== 'string' || !known(to))) return c.json({ error: 'no_session' }, 404)
+    const notice = body?.notice === undefined ? null : keep(body.notice)
+    if (notice === undefined) return c.json({ error: 'invalid', field: 'notice' }, 400)
+    const now = Date.now()
+    const closing = new Set([...Object.keys(state.sessions).map(idOf), ...editors.keys()].filter((session) => session !== LOCAL && (to === undefined || session === to)))
+    let drafted = true
+    for (const session of closing) {
+      for (const hash of Object.keys(state.sessions)) if (idOf(hash) === session) delete state.sessions[hash]
+      const beat = editors.get(session)
+      if (beat && !beat.drafted) drafted = false
+      editors.delete(session)
+      activeAt.delete(session)
+      toOne.delete(session)
+      ended.set(session, { notice: notice && { ...notice, final: true }, at: now })
+    }
+    for (const [session, end] of ended) if (now - end.at > ENDED_LIFE) ended.delete(session)
+    await save()
+    return c.json({ ok: true, closed: closing.size, drafted })
+  })
+  app.route('/host', host)
 
   app.get('/editor.js', async (c) => {
     const headers = { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-cache' }
@@ -651,28 +835,32 @@ export async function createLocal(options: LocalOptions) {
       if (restricted) res.setHeader('x-robots-tag', 'noindex, nofollow')
       // The API answers for itself: signing in is open to all, the rest is guarded route by route.
       if (isApi(url)) return next()
-      // Only the door hands out tickets: without its key there are none, and the parameter is the site's own business.
-      if (options.doorKey && req.method === 'GET' && url.includes('ticket=')) {
+      // Only the host hands out tickets: without its key there are none, and the parameter is the site's own business.
+      if (options.hostKey && req.method === 'GET' && url.includes('ticket=')) {
         const parsed = new URL(url, 'http://site')
         const ticket = parsed.searchParams.get('ticket')
         if (ticket) return void exchange(req, res, parsed, ticket).catch(next)
       }
-      if (!isEditor(req)) return door(req, res)
+      if (!isEditor(req)) return signIn(req, res)
       if (isPrivate(url)) return void res.writeHead(404).end()
       next()
     },
     middleware(req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) {
       const url = req.url ?? ''
-      // Whatever the artist asks for is activity, the door's questions and the editor's signs of life excepted. A
+      // Whatever the artist asks for is activity, the host's questions and the editor's signs of life excepted. A
       // request is under way until its answer has gone: a long upload ends with activity too.
-      const counts = isEditor(req) && !/^\/_foliome\/(presence|door)([?/]|$)/.test(url)
-      if (counts) touch()
+      const counts = isEditor(req) && !/^\/_foliome\/(presence|host)([?/]|$)/.test(url)
+      const session = counts ? sessionOf(req) : null
+      if (counts) touch(session)
       if (!isApi(url)) return void media(req, res, next).catch(next)
       if (counts) {
+        const upload = req.method === 'PUT' && /^\/_foliome\/assets([?/]|$)/.test(url)
         inFlight++
+        if (upload) uploads++
         res.once('close', () => {
           inFlight--
-          touch()
+          if (upload) uploads--
+          touch(session)
         })
       }
       api(req, res)

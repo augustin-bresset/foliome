@@ -42,19 +42,8 @@ const fr = {
   publish: 'Mettre en ligne',
   quit: 'Quitter',
 
-  // Closing an editing session nobody uses
-  closingSoon: (minutes: number) => `Sans activité, l’édition se ferme dans ${minutes === 1 ? 'une minute' : `${minutes} minutes`}. Ce qui est enregistré est conservé.`,
-  closingUnsaved: (minutes: number) => `Des modifications ne sont pas enregistrées. Enregistrez-les : sans activité, l’édition se ferme dans ${minutes === 1 ? 'une minute' : `${minutes} minutes`}.`,
-  stay: 'Continuer',
-  closed: 'L’édition s’est fermée faute d’activité. Ce qui était enregistré est conservé.',
-  reopen: 'Rouvrir',
-  closedForRoom: (after: number, kept: boolean) =>
-    `L’édition s’est fermée après ${minutesFr(after)} sans activité, pour laisser la place à un autre artiste. ${kept ? 'Vos modifications non enregistrées sont gardées : elles vous seront proposées à votre retour.' : 'Ce qui était enregistré est conservé.'}`,
-  timeEnding: (left: number) => `Le temps d’édition se termine dans ${minutesFr(left)}. Pensez à enregistrer.`,
-  timeOver: 'Le temps d’édition est écoulé. Ce qui était enregistré est conservé.',
-  trialEnding: (left: number) => `L’essai se termine dans ${minutesFr(left)}.`,
-  trialOver: 'L’essai est terminé. Merci d’avoir pris le temps d’essayer\u202f!',
-  backTo: (host: string) => `Retour sur ${host}`,
+  // What the host running the server says, counting down
+  timeLeft: minutesFr,
 
   // Signing in
   badCode: 'Ce code n’est pas le bon. Vérifiez-le et réessayez.',
@@ -169,18 +158,7 @@ const en: typeof fr = {
   publish: 'Publish',
   quit: 'Quit',
 
-  closingSoon: (minutes) => `With nothing happening, editing closes in ${minutes === 1 ? 'one minute' : `${minutes} minutes`}. What is saved is kept.`,
-  closingUnsaved: (minutes) => `Some changes are not saved. Save them: with nothing happening, editing closes in ${minutes === 1 ? 'one minute' : `${minutes} minutes`}.`,
-  stay: 'Keep editing',
-  closed: 'Editing closed after a while with nothing happening. What was saved is kept.',
-  reopen: 'Open again',
-  closedForRoom: (after, kept) =>
-    `Editing closed after ${minutesEn(after)} with nothing happening, to make room for another artist. ${kept ? 'Your unsaved changes are kept: you will be offered them when you come back.' : 'What was saved is kept.'}`,
-  timeEnding: (left) => `Editing time ends in ${minutesEn(left)}. Remember to save.`,
-  timeOver: 'Editing time is over. What was saved is kept.',
-  trialEnding: (left) => `The trial ends in ${minutesEn(left)}.`,
-  trialOver: 'The trial is over. Thank you for taking the time to try it!',
-  backTo: (host) => `Back to ${host}`,
+  timeLeft: minutesEn,
 
   badCode: 'That code is not right. Check it and try again.',
   tooMany: 'Too many tries. Wait five minutes before trying again.',

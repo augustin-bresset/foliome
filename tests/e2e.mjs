@@ -553,6 +553,47 @@ try {
   results.push(`CRASH  ${String(err).split('\n')[0]}`)
 }
 
+/* Whoever runs the server, a host, speaks to the artist through the editor */
+try {
+  await sh('npx astro dev stop', { cwd: DEMO })
+  const key = 'e2e-host-key'
+  await sh(`npx astro dev --port ${PORT}`, { cwd: DEMO, env: { ...process.env, FOLIOME_HOST_KEY: key } })
+  const host = (what, body) =>
+    fetch(`${local}/_foliome/host${what}`, { method: body ? 'POST' : 'GET', headers: { 'x-foliome-host': key, origin: local, 'content-type': 'application/json' }, body: body && JSON.stringify(body) })
+  // A page of its own: the server will be stopped under it, which its console reports.
+  const artist = await (await browser.newContext({ locale: 'fr-FR', viewport: { width: 1440, height: 900 } })).newPage()
+  const editor = (selector) => artist.locator(`foliome-editor ${selector}`)
+  // The editor calls in as soon as its tab is looked at again: no waiting for its next sign of life.
+  const callIn = () => artist.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+  await artist.goto(`${local}/?edit`)
+  await editor('.bar').waitFor({ timeout: 60000 })
+  await host('/notice', {
+    notice: {
+      text: { fr: 'Sans activité, l’édition se ferme dans {countdown}.', en: 'With nothing happening, editing closes in {countdown}.' },
+      level: 'warning',
+      in: 270_000,
+      actions: [{ label: { fr: 'Continuer', en: 'Keep editing' } }],
+      untilActive: true,
+    },
+    farewell: { text: 'L’édition s’est fermée.', final: true, actions: [{ label: 'Rouvrir', do: 'reload' }] },
+  })
+  await callIn()
+  await editor('.notice').waitFor({ timeout: 15000 })
+  check('a host’s notice is shown in the artist’s language, its countdown running', (await editor('.notice p').textContent()) === 'Sans activité, l’édition se ferme dans 5 minutes.', await editor('.notice p').textContent())
+  await editor('.notice .btn').click()
+  await artist.waitForTimeout(800)
+  const status = await (await host('')).json()
+  check('its button puts it away, and the host hears the artist is there', (await editor('.notice').count()) === 0 && status.idle < 5000 && status.sessions[0]?.id === 'local', JSON.stringify(status))
+  // Stopped without another word: the editor says what the host asked it to.
+  await sh('npx astro dev stop', { cwd: DEMO })
+  await callIn()
+  await editor('.notice').waitFor({ timeout: 15000 })
+  check('a server gone quiet leaves the farewell the host gave', (await editor('.notice p').textContent()) === 'L’édition s’est fermée.' && (await editor('.notice .btn').textContent()) === 'Rouvrir')
+  await artist.close()
+} catch (err) {
+  results.push(`CRASH  ${String(err).split('\n')[0]}`)
+}
+
 await browser.close()
 await sh('npx astro dev stop', { cwd: DEMO })
 await seed()

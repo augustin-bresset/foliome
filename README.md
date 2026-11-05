@@ -18,7 +18,6 @@ npm run dev        # le site de démo, sur cet ordinateur : http://localhost:432
 npm run edit       # idem, ouvert au réseau local pour une séance avec l'artiste
 npm run build      # le site statique, dans apps/demo/dist
 npm run seed       # régénère le contenu de démo d'origine (images, film, modèle 3D)
-node scripts/reset-demo.mjs  # remet la démo telle qu'elle est dans le dépôt, en un instant
 npm test           # tests unitaires
 npm run test:e2e   # une séance d'édition complète dans un vrai navigateur
 ```
@@ -193,95 +192,80 @@ Rien de tout cela ne gêne l'artiste : en cas d'échec, l'enregistrement et la m
 
 Une fois le site sur un serveur, `content/` lui appartient : le modifier à la main ailleurs mène à un conflit, qui bloque l'envoi jusqu'à ce qu'il soit résolu. Le travail de l'artiste, lui, reste enregistré sur le serveur.
 
-## Plusieurs sites sur un serveur : la porte
+## Faire tourner Foliome pour d'autres : l'API d'hébergement
 
-Un serveur d'édition prend 400 à 550 Mo. Sur un serveur partagé, aucun ne tourne en permanence : `packages/door`, seul toujours en marche, les réveille et les endort.
+Un serveur d'édition peut être lancé, endormi et surveillé par un programme à côté de lui, l'hébergeur : celui qui sait combien de sites tiennent sur la machine, qui y entre et pour combien de temps. Foliome n'en connaît aucun en particulier. Il offre à n'importe lequel l'API ci-dessous, à laquelle se tenir ; l'hébergement de foliome.eu en est un, dans un dépôt à part.
 
-- **Entrer** : l'artiste donne son code sur la page d'accueil. La porte le compare aux codes des sites, lus dans leur `.foliome/local.json`, et ne réveille que le site concerné. Un mauvais code ne réveille rien ; les essais sont comptés par visiteur et pour tous.
-- **Combien** : au plus trois serveurs à la fois, la démo à part. Pour en réveiller un quatrième, la porte endort d'abord un site sans éditeur ouvert, le plus longtemps inactif d'abord ; à défaut, un site dont l'éditeur est ouvert mais sans activité depuis au moins 10 minutes, là encore le plus inactif d'abord. Si aucun ne peut partir, elle répond que le serveur est occupé.
-- **Céder la place** : l'artiste dont l'éditeur est fermé ainsi le voit dire pourquoi (« L'édition s'est fermée après 10 minutes sans activité, pour laisser la place à un autre artiste »). La porte l'en avertit à l'avance, dès que son site peut céder la place : un onglet que le navigateur a mis en veille n'entendrait pas un message envoyé au dernier moment. Avec des modifications non enregistrées, le site ne cède la place qu'une fois leurs brouillons arrivés sur le serveur, et le message dit qu'elles sont gardées. Un envoi de fichier ou une mise en ligne en cours n'est jamais coupé.
-- **Fermer** : sans activité pendant 25 minutes, l'éditeur prévient l'artiste ; à 30 minutes le site s'endort, et son arrêt enregistre son travail dans git. Avec des modifications pas encore enregistrées, il attend jusqu'à une heure. Sans aucun éditeur ouvert, il s'endort après 10 minutes.
-- **Parler aux sites** : la porte et les sites partagent la clé `FOLIOME_DOOR_KEY`. Sans elle, `/_foliome/door` n'existe pas.
+Pour l'activer, le serveur d'édition et l'hébergeur partagent une clé, `FOLIOME_HOST_KEY` (option `hostKey` de `createLocal`). Sans elle, `/_foliome/host` n'existe pas. Chaque requête porte l'en-tête `X-Foliome-Host: <clé>` et arrive sous le nom public du site, avec `Origin: https://<nom public>` pour un `POST`, comme le feraient ses propres pages. Sans la bonne clé, la réponse est un 404.
 
-### La démo, à tour de rôle
-
-Un site marqué `"demo": true` (l'Atelier Morane, `apps/demo`) est prêté à qui veut l'essayer, sans code, depuis le bouton « Essayer la démo » de foliome.eu.
-
-- **Un à la fois** : un visiteur a la démo pour lui seul pendant 10 minutes. Les suivants attendent dans une file : la page d'accueil leur dit leur place et l'attente estimée (« Vous êtes 2e dans la file : environ 18 minutes d'attente »), et les envoie sur la démo quand leur tour vient, sans qu'ils aient à recharger.
-- **La file** : la page garde un ticket et redemande sa place toutes les trois secondes ; une page qui cesse de demander pendant 30 secondes perd sa place. Fermer le panneau la rend aussitôt ; recharger la page la garde. La file compte au plus 40 personnes, et deux places par adresse, dix demandes par adresse en cinq minutes.
-- **Son tour** : la porte démarre la démo, ou la redémarre si elle a déjà servi (son service remet d'abord le contenu d'origine, voir plus bas), puis lui demande une session valable pour tout le tour, ce qui ferme toute autre session. Le site lui rend un ticket à usage unique, et le visiteur est envoyé sur `https://<nom de la démo>/?ticket=…`. Le serveur d'édition échange le ticket contre son cookie de session et retire le ticket de l'adresse. Un ticket déjà utilisé ou expiré mène à la page d'entrée, qui renvoie vers foliome.eu pour demander son tour.
-- **La fin** : deux minutes avant la fin, l'éditeur affiche le temps qui reste. À la fin, la session se ferme, le serveur s'arrête et le suivant passe.
-- **Plus tôt** : un visiteur qui n'ouvre pas la démo dans les 90 secondes, ou qui la quitte (aucun éditeur ouvert depuis une minute environ), laisse la place au suivant.
-- **Sa place à elle** : la démo ne compte pas parmi les trois serveurs des artistes, ne leur prend jamais leur place, et la logique qui endort leurs sites ne la touche pas. Son code ne mène nulle part.
-
-### Configuration
-
-La porte lit sa configuration dans le fichier nommé par `FOLIOME_DOOR_CONFIG` :
+### Ce qui se passe : `GET /_foliome/host`
 
 ```json
 {
-  "home": "https://foliome.eu",
-  "sites": [
-    { "name": "tom.foliome.eu", "port": 4331, "root": "/srv/foliome/tom-conan", "unit": "foliome-site@tom-conan.service" },
-    { "name": "demo.foliome.eu", "port": 4340, "root": "/srv/foliome/foliome/apps/demo", "unit": "foliome-site@demo.service", "demo": true }
-  ],
-  "limits": { "awake": 3, "afk": 600000, "demo": 600000 }
+  "idle": 42000, "dirty": true, "editors": 1, "busy": false, "drafted": true,
+  "uploads": 0, "publishing": false,
+  "sessions": [{ "id": "9f2c41d07ab3e815", "seen": 12000, "idle": 42000, "dirty": true, "drafted": true }]
 }
 ```
 
-Tout ce qui est dans `limits` est facultatif ; les durées sont en millisecondes.
+| Champ | Sens |
+|---|---|
+| `idle` | Millisecondes depuis la dernière action de l'artiste, toutes sessions confondues |
+| `dirty` | Un panneau ouvert tient des modifications non enregistrées |
+| `editors` | Éditeurs ouverts, d'après leurs signes de vie (un toutes les trente secondes) |
+| `busy` | Une requête est en cours, envoi de fichier ou mise en ligne : arrêter maintenant la couperait |
+| `drafted` | Tout ce qui n'est pas enregistré est arrivé en brouillon de secours : fermer ne perd rien |
+| `uploads`, `publishing` | Fichiers en cours d'envoi ; mise en ligne en cours |
+| `sessions` | Un élément par éditeur ouvert : `id` (pour lui parler, `local` pour le navigateur du développeur), `seen` (ms depuis son dernier signe de vie), `idle`, `dirty`, `drafted` |
 
-| Limite | Par défaut | Rôle |
-|---|---|---|
-| `awake` | 3 | Serveurs d'artistes réveillés à la fois, la démo à part |
-| `warn`, `close`, `closeUnsaved`, `alone` | 25, 30, 60, 10 min | Prévenir, fermer, fermer malgré des modifications non enregistrées, fermer sans éditeur ouvert |
-| `afk` | 10 min | Sans activité depuis ce temps, un éditeur ouvert cède la place à un artiste qui arrive |
-| `waking` | 90 s | Temps laissé à un serveur pour se réveiller |
-| `demo` | 10 min | Le tour d'un visiteur sur la démo |
-| `demoWarn` | 2 min | Le temps restant s'affiche à partir de là |
-| `arrive` | 90 s | Sans éditeur ouvert après ce délai, le tour passe au suivant |
-| `linger` | 30 s | Une page de la file qui ne demande plus sa place depuis ce temps la perd |
-| `line`, `places` | 40, 2 | Personnes dans la file ; places par adresse |
+### Ouvrir une session : `POST /_foliome/host/grant`
 
-Elle démarre et arrête les services par `systemctl`, sans mot de passe : une règle polkit doit le lui permettre pour ces services-là seulement. Le serveur web devant elle lui transmet `POST /entrer` et `POST /entrer/demo` depuis foliome.eu, et écrit lui-même l'en-tête `X-Forwarded-For`.
+`{ "ms": 600000, "home": "https://exemple.org/#demo" }` ferme toutes les sessions et en prépare une de `ms` millisecondes. La réponse, `{ "ticket": "…" }`, s'échange une fois, dans les deux minutes, en envoyant le visiteur sur `https://<nom public>/?ticket=…` : le serveur pose son cookie de session et retire le ticket de l'adresse. Un ticket déjà utilisé ou expiré mène à la page d'entrée. `home` est l'adresse où renvoyer qui arrive sans session sur un site `restricted`.
 
-### Le service de la démo
+### Parler aux artistes : `POST /_foliome/host/notice`
 
-La démo tourne comme les autres sites, dans le dossier `apps/demo` d'un clone du dépôt, avec trois choses en plus : `FOLIOME_DEMO=1`, qui la restreint (voir plus bas), son adresse publique, et la remise à neuf avant chaque démarrage. Par exemple, en complément du service des sites :
-
-```ini
-# /etc/systemd/system/foliome-site@demo.service.d/demo.conf
-[Service]
-WorkingDirectory=/srv/foliome/foliome/apps/demo
-Environment=FOLIOME_DEMO=1
-Environment=FOLIOME_ADDRESS=https://demo.foliome.eu
-EnvironmentFile=/etc/foliome/door.env
-ExecStartPre=/usr/bin/node /srv/foliome/foliome/scripts/reset-demo.mjs /srv/foliome/foliome/apps/demo
+```json
+{
+  "notice": {
+    "text": { "fr": "Maintenance dans {countdown}. Pensez à enregistrer.", "en": "Maintenance in {countdown}. Remember to save." },
+    "level": "warning",
+    "in": 600000,
+    "actions": [{ "label": { "fr": "Compris", "en": "Got it" } }, { "label": "État du service", "href": "https://exemple.org/etat" }]
+  },
+  "farewell": { "text": "L'édition est fermée.", "final": true, "actions": [{ "label": "Rouvrir", "do": "reload" }] },
+  "to": "9f2c41d07ab3e815"
+}
 ```
 
-`/etc/foliome/door.env` contient `FOLIOME_DOOR_KEY=…`, la même clé que la porte. Le port est celui de la configuration de la porte (4340 ici).
+Un message, l'éditeur l'affiche tel quel : Foliome ne lui donne aucun sens. Fermer une session, prévenir d'une maintenance ou annoncer une nouveauté ne sont que des usages.
 
-`scripts/reset-demo.mjs` remet `content/` et `public/media/` tels qu'ils sont dans le dépôt (`git checkout` et `git clean`, sans réseau, en une fraction de seconde) et efface ce que les visiteurs ont laissé : historique d'annulation, brouillons, sessions. `npm run seed`, lui, régénère tout le contenu de démo : une vingtaine de secondes et un processeur entier, à éviter avant chaque visiteur.
+| Champ du message | Sens |
+|---|---|
+| `text` | Un texte, ou un par langue (`fr`, `en`…) : l'éditeur montre celui de la langue de l'artiste, sinon le premier. Au plus 2000 caractères |
+| `level` | `info` (par défaut), `warning` ou `error` |
+| `in` | Un compte à rebours, en millisecondes à partir de maintenant : `{countdown}` dans le texte affiche le temps qui reste (« 4 minutes », « moins d'une minute »), tenu à jour, compté sur l'horloge du serveur |
+| `actions` | Jusqu'à quatre boutons, chacun avec son `label`. Par défaut un bouton range le message et signale que l'artiste est là ; `"do": "reload"` recharge la page ; `"href"` mène à une adresse `http(s)` |
+| `final` | La session est finie : l'éditeur cesse de parler au serveur et n'affiche plus que ce message |
+| `untilActive` | Le message disparaît dès que l'artiste fait quoi que ce soit : une remarque sur son absence, par exemple |
+
+- `notice` est affiché tout de suite, au prochain signe de vie de l'éditeur ; `null` le retire.
+- `farewell` n'est affiché que si le serveur cesse de répondre et que la session n'est plus valable : c'est ce que l'éditeur dira si l'hébergeur arrête le serveur sans prévenir une dernière fois, par exemple parce qu'un onglet en veille n'aurait rien entendu. `null` le retire.
+- Un champ absent ne change rien à ce qui avait été dit.
+- Sans `to`, le message va à tous les éditeurs, et remplace ce que chacun avait reçu seul. Avec `to`, il ne va qu'à cette session (404 `no_session` si elle n'existe pas).
+
+### Fermer une session : `POST /_foliome/host/close`
+
+`{ "to": "9f2c41d07ab3e815", "notice": { … } }` termine la session tout de suite, ou toutes sans `to` : son cookie n'ouvre plus rien. Ce que son éditeur tenait sans l'avoir enregistré n'est pas perdu : ce qu'il avait déjà envoyé reste en brouillon de secours, et à son prochain signe de vie il remet ce qu'il tient encore, puis affiche `notice`, rendu `final`. L'artiste retrouvera ces brouillons à son retour. La réponse dit combien de sessions sont fermées et si tout ce qui n'était pas enregistré était déjà arrivé : `{ "ok": true, "closed": 1, "drafted": true }`.
 
 ### Un site prêté : `restricted`
 
-L'option `restricted: true` prépare un site à être prêté à des inconnus ; la démo la lit dans `FOLIOME_DEMO`.
+L'option `restricted: true` prépare un site à être prêté à des inconnus, par exemple une démo publique ; la démo la lit dans `FOLIOME_DEMO`.
 
-- Le code d'accès n'ouvre rien : on n'entre que par un ticket donné par la porte, pour une session de la durée qu'elle a fixée.
+- Le code d'accès n'ouvre rien : on n'entre que par un ticket de l'hébergeur, pour une session de la durée qu'il a fixée.
 - Ni mise en ligne ni git, quelle que soit la configuration.
 - 15 Mo par fichier (sauf `maxFileSize`) et 100 Mo en tout par session (`restricted: { mediaBudget: … }` en octets).
 - Les pages portent `X-Robots-Tag: noindex`.
-- Chaque session donnée par la porte efface les brouillons de la précédente.
-
-### Ce que la porte attend des sites
-
-La porte est la partie serveur, et pourrait vivre dans un dépôt à part. Des sites, elle n'utilise que `/_foliome/door`, toujours avec l'en-tête `X-Foliome-Door: <clé>`, sous leur nom public :
-
-| Requête | Réponse |
-|---|---|
-| `GET` | La présence : `idle` (ms depuis la dernière activité), `dirty` (des modifications non enregistrées), `editors` (éditeurs ouverts), `busy` (envoi ou mise en ligne en cours), `drafted` (tout ce qui n'est pas enregistré est arrivé en brouillon) |
-| `POST { "notice": … }` | Un message pour l'éditeur : `closing` (`at`, `unsaved`, `reason`), `closed` (`home`, `reason`, `after`), `standby` (rien à afficher : dit pourquoi si la session se ferme sans autre avertissement), ou `null`. `reason` vaut `idle`, `room` ou `time` |
-| `POST { "grant": { "ms": …, "home": … } }` | Ferme toutes les sessions et en prépare une de `ms` millisecondes ; rend `{ "ticket": … }`, à échanger une fois, dans les deux minutes, sur `/?ticket=…`. `home` est l'adresse où renvoyer qui arrive sans ticket valable |
+- Chaque session donnée par l'hébergeur efface les brouillons de la précédente.
 
 ## Organisation
 
@@ -291,10 +275,9 @@ La porte est la partie serveur, et pourrait vivre dans un dépôt à part. Des s
 | `packages/server` | L'API d'édition, indépendante du stockage ; stockage sur disque ; préparation des fichiers |
 | `packages/editor` | L'éditeur affiché par-dessus le site |
 | `packages/astro` | L'intégration Astro : édition locale, code d'accès, lecture du contenu, enregistrement dans git |
-| `packages/door` | La porte d'un serveur partagé : le code mène au bon site, qu'elle réveille et endort ; la file de la démo |
 | `apps/demo` | Le site de référence |
 | `apps/home` | foliome.eu, modifié avec Foliome comme les sites qu'il présente (`npm run home`) |
-| `scripts/seed-demo.mjs`, `scripts/reset-demo.mjs` | Générer le contenu de la démo ; la remettre à neuf |
+| `scripts/seed-demo.mjs` | Générer le contenu de la démo |
 | `tests/e2e.mjs` | La séance d'édition rejouée dans un navigateur |
 
 ## Pas encore fait
@@ -302,6 +285,5 @@ La porte est la partie serveur, et pourrait vivre dans un dépôt à part. Des s
 - Les fichiers retirés du contenu restent dans `public/media/`.
 - Une liste avec `path` (une page par élément) n'est prise en charge qu'au premier niveau du contenu.
 - Le texte mis en forme n'a été vérifié que dans Chrome.
-- La file de la démo n'est gardée qu'en mémoire : redémarrer la porte la vide, et ferme la démo en cours.
 - Un élément en cours de création n'a pas de brouillon de secours.
 - La version hébergée (édition à distance sans que l'ordinateur du développeur soit allumé) : `packages/server` est prévu pour recevoir un second stockage.

@@ -42,7 +42,7 @@ async function boot() {
     delete document.documentElement.dataset.foliomeMode
   }
 
-  const start = async (home?: string) => {
+  const start = async () => {
     const [config, initial, drafts] = await Promise.all([api.config(), api.content(), api.drafts().then(({ drafts }) => drafts, () => ({}))])
     setConversions(config.converts)
     setLargest(config.maxFileSize)
@@ -52,17 +52,17 @@ async function boot() {
       await api.logout().catch(() => {})
       close()
     }
-    render(<App host={host} config={config} initial={initial} drafts={drafts} home={home} onQuit={quit} />, root)
+    render(<App host={host} config={config} initial={initial} drafts={drafts} onQuit={quit} />, root)
   }
 
   if (code) await api.login(code).catch(() => {})
   const { editor, code: byCode = true, home } = await api.session()
-  // Where the code opens nothing, whoever has no session is sent back to where turns are given; the door page says
+  // Where the code opens nothing, whoever has no session is sent back to where turns are given; the sign-in page says
   // whether they came with a ticket already used.
-  const turn = byCode ? undefined : { home, spent: document.documentElement.dataset.foliomeDoor === 'ticket' }
-  // At the door there is no site behind the prompt yet, only the page that asks for the code. Once in, the page that
-  // was asked for is loaded, with the editor on it.
-  if (document.documentElement.hasAttribute('data-foliome-door')) {
+  const turn = byCode ? undefined : { home, spent: document.documentElement.dataset.foliomeSignin === 'ticket' }
+  // On the sign-in page there is no site behind the prompt yet, only the page that asks for the code. Once in, the
+  // page that was asked for is loaded, with the editor on it.
+  if (document.documentElement.hasAttribute('data-foliome-signin')) {
     document.documentElement.lang = lang
     const enter = () => {
       url.searchParams.set('edit', '')
@@ -72,7 +72,7 @@ async function boot() {
     else render(<Login onSuccess={enter} turn={turn} />, root)
     return
   }
-  if (editor) await start(home)
+  if (editor) await start()
   else render(<Login onSuccess={start} onClose={close} turn={turn} />, root)
 }
 

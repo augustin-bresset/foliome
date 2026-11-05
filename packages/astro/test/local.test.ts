@@ -57,12 +57,12 @@ test('the developer’s own browser needs no code', async () => {
   assert.equal((await ask('/_foliome/content')).status, 200)
 })
 
-test('anyone else gets the door, and nothing of the site or its source', async () => {
+test('anyone else gets the sign-in page, and nothing of the site or its source', async () => {
   const { ask, port } = await serve()
   const lan = `192.168.1.20:${port}`
   const page = await ask('/projets/halle', { host: lan })
   assert.equal(page.status, 401)
-  assert.match(page.text, /data-foliome-door/)
+  assert.match(page.text, /data-foliome-signin/)
   assert.match(page.text, /<script src="\/_foliome\/editor\.js">/)
   assert.match(page.text, /<title>Atelier &#60;Morane&#62;<\/title>/)
   assert.doesNotMatch(page.text, new RegExp(SITE))
@@ -74,12 +74,12 @@ test('anyone else gets the door, and nothing of the site or its source', async (
   }
   assert.equal((await ask('/_foliome/content', { host: lan })).status, 401)
   assert.equal((await ask('/_foliome/config', { host: lan })).status, 401)
-  // What the door needs is open to all.
+  // What the sign-in page needs is open to all.
   assert.equal((await ask('/_foliome/editor.js', { host: lan })).text, '/* editor */')
   assert.deepEqual(JSON.parse((await ask('/_foliome/session', { host: lan })).text), { editor: false, code: true })
 })
 
-test('the code opens the door for thirty days', async () => {
+test('the code opens the site for thirty days', async () => {
   const { ask, signIn, code, port } = await serve()
   const lan = `192.168.1.20:${port}`
   assert.equal((await signIn('AAAABBBB', `http://${lan}`, lan)).status, 401)
@@ -219,17 +219,18 @@ test('what comes before publishing is done before the command runs', async () =>
   assert.deepEqual(JSON.parse(text), { ok: true, log: 'committed' })
 })
 
-const KEY = 'the-door-key'
+const KEY = 'the-host-key'
 const PUBLIC = 'atelier.example.org'
-const fromDoor = { origin: `https://${PUBLIC}`, 'content-type': 'application/json', 'x-foliome-door': KEY }
+const fromHost = { origin: `https://${PUBLIC}`, 'content-type': 'application/json', 'x-foliome-host': KEY }
 const json = (text: string) => JSON.parse(text) as Record<string, unknown>
 
-/** A server behind a door, reached under its public name. */
-async function behindDoor(options: Partial<LocalOptions> = {}) {
-  const site = await serve({ address: new URL(`https://${PUBLIC}`), doorKey: KEY, ...options })
-  const grant = async (ms: number, home = 'https://foliome.example/#demo') =>
-    json((await site.ask('/_foliome/door', { method: 'POST', host: PUBLIC, headers: fromDoor, body: JSON.stringify({ grant: { ms, home } }) })).text).ticket as string
-  const presence = async () => json((await site.ask('/_foliome/door', { host: PUBLIC, headers: fromDoor })).text)
+/** A server run by a host, reached under its public name. */
+async function hosted(options: Partial<LocalOptions> = {}) {
+  const site = await serve({ address: new URL(`https://${PUBLIC}`), hostKey: KEY, ...options })
+  const host = (what: string, body?: unknown, headers = fromHost) =>
+    site.ask(`/_foliome/host${what}`, { method: body === undefined ? 'GET' : 'POST', host: PUBLIC, headers, body: body === undefined ? '' : JSON.stringify(body) })
+  const grant = async (ms: number, home = 'https://foliome.example/#demo') => json((await host('/grant', { ms, home })).text).ticket as string
+  const presence = async () => json((await host('')).text)
   const call = (url: string, cookie: string, body?: unknown) =>
     site.ask(url, {
       method: body === undefined ? 'GET' : 'POST',
@@ -237,11 +238,11 @@ async function behindDoor(options: Partial<LocalOptions> = {}) {
       headers: { origin: `https://${PUBLIC}`, 'content-type': 'application/json', ...session(cookie) },
       body: body === undefined ? '' : JSON.stringify(body),
     })
-  return { ...site, grant, presence, call }
+  return { ...site, host, grant, presence, call }
 }
 
-test('a ticket from the door opens one session, once, for the time granted, and closes every other', async () => {
-  const site = await behindDoor()
+test('a ticket from the host opens one session, once, for the time granted, and closes every other', async () => {
+  const site = await hosted()
   const before = await site.signIn(site.code, `https://${PUBLIC}`, PUBLIC)
   assert.equal(before.status, 200)
 
@@ -262,18 +263,26 @@ test('a ticket from the door opens one session, once, for the time granted, and 
   assert.equal(again.status, 303)
   const stranger = await site.ask(`/?ticket=${ticket}`, { host: PUBLIC })
   assert.equal(stranger.status, 401)
-  assert.match(stranger.text, /data-foliome-door="ticket"/)
+  assert.match(stranger.text, /data-foliome-signin="ticket"/)
   assert.equal((await site.ask('/?ticket=forged', { host: PUBLIC })).status, 401)
 })
 
-test('without the door’s key nobody grants anything', async () => {
-  const site = await behindDoor()
-  const reply = await site.ask('/_foliome/door', { method: 'POST', host: PUBLIC, headers: { ...fromDoor, 'x-foliome-door': 'guess' }, body: JSON.stringify({ grant: { ms: 1000 } }) })
-  assert.equal(reply.status, 404)
+test('without the host’s key nobody asks, grants or says anything', async () => {
+  const site = await hosted()
+  const guess = { ...fromHost, 'x-foliome-host': 'guess' }
+  assert.equal((await site.host('', undefined, guess)).status, 404)
+  assert.equal((await site.host('/grant', { ms: 1000 }, guess)).status, 404)
+  assert.equal((await site.host('/notice', { notice: { text: 'Hello' } }, guess)).status, 404)
+  assert.equal((await site.host('/close', {}, guess)).status, 404)
+  // Nor with the key from another page.
+  assert.equal((await site.host('/notice', { notice: { text: 'Hello' } }, { ...fromHost, origin: 'https://elsewhere.example' })).status, 403)
+  // A server with no key answers nobody.
+  const alone = await serve({ address: new URL(`https://${PUBLIC}`) })
+  assert.equal((await alone.ask('/_foliome/host', { host: PUBLIC, headers: fromHost })).status, 404)
 })
 
 test('a restricted site opens only by ticket, publishes nothing and stays out of search engines', async () => {
-  const site = await behindDoor({ restricted: { mediaBudget: 1000 }, maxFileSize: 600, publish: 'echo published' })
+  const site = await hosted({ restricted: { mediaBudget: 1000 }, maxFileSize: 600, publish: 'echo published' })
   assert.equal((await site.signIn(site.code, `https://${PUBLIC}`, PUBLIC)).status, 403)
   const ticket = await site.grant(60_000)
   const page = await site.ask(`/?ticket=${ticket}`, { host: PUBLIC })
@@ -303,8 +312,8 @@ test('a restricted site opens only by ticket, publishes nothing and stays out of
     200,
   )
 
-  const door = await site.ask('/', { host: PUBLIC })
-  assert.equal(door.status, 401)
+  const signIn = await site.ask('/', { host: PUBLIC })
+  assert.equal(signIn.status, 401)
   assert.match((await new Promise<string>((done) => http.get({ port: site.port, host: '127.0.0.1', path: '/', headers: { host: PUBLIC } }, (res) => done(String(res.headers['x-robots-tag']))))), /noindex/)
 })
 
@@ -316,7 +325,7 @@ test('a file over the site’s limit is refused', async () => {
 })
 
 test('what a panel holds unsaved is kept as a draft until it is saved or let go', async () => {
-  const site = await behindDoor()
+  const site = await hosted()
   const { cookie } = await site.signIn(site.code, `https://${PUBLIC}`, PUBLIC)
   const beat = (body: unknown) => site.call('/_foliome/presence', cookie, body)
   const drafts = async () => json((await site.call('/_foliome/drafts', cookie)).text).drafts as Record<string, { value: unknown; at: number }>
@@ -346,4 +355,121 @@ test('what a panel holds unsaved is kept as a draft until it is saved or let go'
   await new Promise((done) => setTimeout(done, 1300))
   const disk = JSON.parse(await readFile(path.join(site.root, '.foliome', 'drafts.json'), 'utf8')) as Record<string, { value: unknown }>
   assert.equal(disk['site.name']?.value, 'Gardé')
+})
+
+test('the host sees who is editing, and what is under way', async () => {
+  const site = await hosted()
+  const tom = await site.signIn(site.code, `https://${PUBLIC}`, PUBLIC)
+  const zoe = await site.signIn(site.code, `https://${PUBLIC}`, PUBLIC)
+  assert.deepEqual((await site.presence()).sessions, [])
+  await site.call('/_foliome/presence', tom.cookie, { dirty: true, active: true, drafts: [{ path: 'site.name', value: 'T.' }] })
+  await site.call('/_foliome/presence', zoe.cookie, { dirty: false, active: false })
+  const seen = await site.presence()
+  assert.equal(seen.editors, 2)
+  assert.equal(seen.dirty, true)
+  assert.equal(seen.drafted, true)
+  assert.equal(seen.uploads, 0)
+  assert.equal(seen.publishing, false)
+  const sessions = seen.sessions as { id: string; dirty: boolean; drafted: boolean; idle: number; seen: number }[]
+  assert.equal(sessions.length, 2)
+  assert.deepEqual(
+    sessions.map(({ dirty, drafted }) => ({ dirty, drafted })),
+    [
+      { dirty: true, drafted: true },
+      { dirty: false, drafted: true },
+    ],
+  )
+  assert.match(sessions[0]!.id, /^[0-9a-f]{16}$/)
+  assert.notEqual(sessions[0]!.id, sessions[1]!.id)
+
+  // An upload under way.
+  let release = () => {}
+  const slow = new Promise<void>((done) => (release = done))
+  const upload = new Promise<number>((done) => {
+    const req = http.request(
+      { port: site.port, host: '127.0.0.1', path: '/_foliome/assets?name=a.bin', method: 'PUT', headers: { host: PUBLIC, origin: `https://${PUBLIC}`, ...session(tom.cookie) } },
+      (res) => {
+        res.resume()
+        res.on('end', () => done(res.statusCode ?? 0))
+      },
+    )
+    req.write('x'.repeat(10))
+    void slow.then(() => req.end())
+  })
+  await new Promise((done) => setTimeout(done, 100))
+  const during = await site.presence()
+  assert.equal(during.uploads, 1)
+  assert.equal(during.busy, true)
+  release()
+  assert.equal(await upload, 200)
+  await new Promise((done) => setTimeout(done, 50))
+  assert.equal((await site.presence()).uploads, 0)
+})
+
+test('the host speaks to every editor, or to one, in its words, with a countdown and buttons', async () => {
+  const site = await hosted()
+  const tom = await site.signIn(site.code, `https://${PUBLIC}`, PUBLIC)
+  const zoe = await site.signIn(site.code, `https://${PUBLIC}`, PUBLIC)
+  const beat = async (cookie: string, active = false) => json((await site.call('/_foliome/presence', cookie, { dirty: false, active })).text)
+  assert.deepEqual(await beat(tom.cookie), { notice: null, farewell: null })
+  await beat(zoe.cookie)
+
+  const notice = {
+    text: { fr: 'Maintenance dans {countdown}.', en: 'Maintenance in {countdown}.' },
+    level: 'warning',
+    in: 600_000,
+    actions: [{ label: 'OK', do: 'dismiss' }, { label: { fr: 'En savoir plus' }, href: 'https://status.example/' }],
+  }
+  assert.deepEqual(json((await site.host('/notice', { notice })).text), { ok: true })
+  const told = (await beat(tom.cookie)).notice as { in: number; text: unknown; level: string; actions: unknown[] }
+  assert.deepEqual(told.text, notice.text)
+  assert.equal(told.level, 'warning')
+  assert.ok(told.in > 590_000 && told.in <= 600_000)
+  assert.deepEqual(told.actions, notice.actions)
+
+  // To one session alone: the other still hears what was said to all.
+  const tomId = ((await site.presence()).sessions as { id: string }[])[0]!.id
+  await site.host('/notice', { to: tomId, notice: { text: 'Rien que pour vous' }, farewell: { text: 'Au revoir', final: true } })
+  assert.deepEqual(await beat(tom.cookie), { notice: { text: 'Rien que pour vous' }, farewell: { text: 'Au revoir', final: true } })
+  assert.deepEqual(((await beat(zoe.cookie)).notice as { text: unknown }).text, notice.text)
+  // Words for all replace what one was told alone.
+  await site.host('/notice', { notice: null })
+  assert.deepEqual(await beat(tom.cookie), { notice: null, farewell: { text: 'Au revoir', final: true } })
+  assert.equal((await site.host('/notice', { to: 'nobody', notice: null })).status, 404)
+
+  // Gone as soon as the artist does anything, if the host says so.
+  await site.host('/notice', { notice: { text: 'Toujours là ?', untilActive: true } })
+  assert.deepEqual((await beat(zoe.cookie)).notice, { text: 'Toujours là ?', untilActive: true })
+  assert.equal((await beat(zoe.cookie, true)).notice, null)
+
+  // What is not a notice is refused, and nothing changes.
+  for (const wrong of [{ text: 12 }, { text: 'x', level: 'loud' }, { text: 'x', in: -1 }, { text: 'x', actions: [{ label: 'x', href: 'javascript:alert(1)' }] }, 'hello']) {
+    assert.equal((await site.host('/notice', { notice: wrong })).status, 400, JSON.stringify(wrong))
+  }
+})
+
+test('the host closes a session: its editor hands over what it held unsaved, and is told why', async () => {
+  const site = await hosted()
+  const tom = await site.signIn(site.code, `https://${PUBLIC}`, PUBLIC)
+  const zoe = await site.signIn(site.code, `https://${PUBLIC}`, PUBLIC)
+  await site.call('/_foliome/presence', tom.cookie, { dirty: true, active: true })
+  await site.call('/_foliome/presence', zoe.cookie, { dirty: false })
+  const [tomId] = ((await site.presence()).sessions as { id: string }[]).map(({ id }) => id)
+
+  const closed = json((await site.host('/close', { to: tomId, notice: { text: 'Session fermée', actions: [{ label: 'Rouvrir', do: 'reload' }] } })).text)
+  // Its unsaved changes had not come as drafts yet: the host knows.
+  assert.deepEqual(closed, { ok: true, closed: 1, drafted: false })
+  assert.equal((await site.call('/_foliome/content', tom.cookie)).status, 401)
+  assert.equal((await site.call('/_foliome/content', zoe.cookie)).status, 200)
+
+  // Its editor calls in: what it holds is kept as drafts, and it hears that the session is over, once.
+  const last = await site.call('/_foliome/presence', tom.cookie, { dirty: true, drafts: [{ path: 'site.name', value: 'Sauvé' }] })
+  assert.deepEqual(json(last.text), { notice: { text: 'Session fermée', actions: [{ label: 'Rouvrir', do: 'reload' }], final: true }, farewell: null })
+  assert.equal((await site.call('/_foliome/presence', tom.cookie, { dirty: true })).status, 401)
+  const drafts = json((await site.call('/_foliome/drafts', zoe.cookie)).text).drafts as Record<string, { value: unknown }>
+  assert.equal(drafts['site.name']?.value, 'Sauvé')
+
+  // Every session at once.
+  assert.deepEqual(json((await site.host('/close', {})).text), { ok: true, closed: 1, drafted: true })
+  assert.equal((await site.call('/_foliome/content', zoe.cookie)).status, 401)
 })

@@ -41,7 +41,7 @@ export interface FoliomeOptions {
   maxFileSize?: number
   /**
    * For a site lent to strangers, a public demo for instance. Nobody enters with the access code: only through a
-   * one-time ticket handed out by the door of a shared server, for a session as long as the door decided. Nothing is
+   * one-time ticket handed out by the host (see `/_foliome/host`), for a session as long as the host decided. Nothing is
    * published or committed to git, files are limited to 15 MB each (unless `maxFileSize` says otherwise) and to
    * `mediaBudget` bytes in all for a session (100 MB unless given), and the pages are kept out of search engines.
    */
@@ -91,10 +91,10 @@ export default function foliome(options: FoliomeOptions): AstroIntegration {
           vite: {
             plugins: [
               {
-                name: 'foliome:door',
+                name: 'foliome:gate',
                 enforce: 'post',
                 // Once every middleware is in place Astro puts checks of its own ahead of them all, and some answer
-                // for files of the project. The door goes in front of those too.
+                // for files of the project. The gate goes in front of those too.
                 configureServer: (server) => () => {
                   server.middlewares.stack.unshift({
                     route: '',
@@ -151,8 +151,8 @@ export default function foliome(options: FoliomeOptions): AstroIntegration {
           publish,
           beforePublish: history?.flush,
           editorFile: path.join(path.dirname(editorPackage), 'dist', 'editor.js'),
-          // Set on a server where a door wakes and closes the editing servers.
-          doorKey: process.env.FOLIOME_DOOR_KEY || undefined,
+          // Set where a host runs this editing server and speaks to it: see `/_foliome/host` in the README.
+          hostKey: process.env.FOLIOME_HOST_KEY || undefined,
           maxFileSize,
           restricted,
           // Pages are rendered from the content file, which Vite does not know
@@ -192,7 +192,7 @@ export default function foliome(options: FoliomeOptions): AstroIntegration {
 
         const key = `?edit=${formatCode(code)}`
         if (restricted) {
-          logger.info(`Site prêté : on n’y entre qu’avec un ticket donné par la porte (FOLIOME_DOOR_KEY${process.env.FOLIOME_DOOR_KEY ? '' : ', absente'}).`)
+          logger.info(`Site prêté : on n’y entre qu’avec un ticket donné par l’hébergeur (FOLIOME_HOST_KEY${process.env.FOLIOME_HOST_KEY ? '' : ', absente'}).`)
           if (!outside) logger.info(`Sur cet ordinateur : http://localhost:${port}/?edit`)
         } else if (outside) {
           logger.info(`Lien pour l'artiste (à distance) : ${new URL(`/${key}`, outside)}`)

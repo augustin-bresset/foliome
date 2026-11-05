@@ -16,9 +16,8 @@ export default defineConfig({
       address: process.env.FOLIOME_ADDRESS,
       // Keeps what the artist changes in git. Meant for a server: FOLIOME_GIT=1, and the commits go to the remote too.
       git: process.env.FOLIOME_GIT ? { push: true } : undefined,
-      // FOLIOME_DEMO=1 on the server where anyone may try it, in turn, through the door: no code, no publishing, no
-      // git, 15 MB per file and 100 MB in all per visitor, kept out of search engines. scripts/reset-demo.mjs puts
-      // the content back before each visitor.
+      // FOLIOME_DEMO=1 on a server where anyone may try it, in turn, with a ticket from the host: no code, no
+      // publishing, no git, 15 MB per file and 100 MB in all per visitor, kept out of search engines.
       restricted: !!process.env.FOLIOME_DEMO,
       content: {
         site: {
