@@ -26,9 +26,29 @@ const QUIET = 10 * 60_000
 const LONGEST = 10 * 60_000
 const EMAIL = 'foliome@foliome.invalid'
 const MESSAGE = 'content: edited in the editor'
+/** What a restore commit says, so that a history can tell one: `content: back to the version of <ISO date> (<short hash>)`. */
+export const restoredMessage = (date: string, short: string) => `content: back to the version of ${date} (${short})`
+/** Where HEAD was just before a restore: `before-restore/2026-11-05-1630`. */
+const SAFETY = 'before-restore/'
+const HASH = /^[0-9a-f]{7,40}$/i
 const PATHS = ['content', path.join('public', 'media')]
 // A file still being uploaded is `.part` until it is whole.
 const UPLOADING = ':(exclude)*.part'
+
+/** Why the content could not be brought back, when that version does not fit the site as it is now. */
+export interface Unfit {
+  error: 'misfit' | 'build'
+  /** The places in the content that do not fit, or the end of the build's output. */
+  detail: string
+}
+
+export type Restored =
+  | { ok: true; commit: string; from: string; date: string; branch: string }
+  | { ok: false; error: 'bad_commit' | 'unknown_commit' | 'unchanged' }
+  | ({ ok: false } & Unfit)
+
+const pad = (n: number) => String(n).padStart(2, '0')
+const minute = (at: Date) => `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}-${pad(at.getHours())}${pad(at.getMinutes())}`
 
 export function contentHistory({ root, name, push = false, quiet = QUIET, warn }: HistoryOptions) {
   const author = `Foliome (${name})`
@@ -70,6 +90,81 @@ export function contentHistory({ root, name, push = false, quiet = QUIET, warn }
     turn = turn.then(task).catch((err: Error) => warn(`${failure} : ${err.message.trim()}`))
     return turn
   }
+  /** In turn too, but its outcome, or its failure, goes back to whoever asked. */
+  const ownTurn = <T>(task: () => Promise<T>) => {
+    const done = turn.then(task)
+    turn = done.catch(() => {})
+    return done
+  }
+
+  /**
+   * The content paths, as git is given them: those that exist here or in `at`. git refuses a path found nowhere. The
+   * site may be a folder within a larger repository: paths are read from the site's folder.
+   */
+  async function present(at: string) {
+    const found: string[] = []
+    for (const name of PATHS) {
+      const here = existsSync(path.join(root, name))
+      if (here || (await git('cat-file', '-e', `${at}:./${name.split(path.sep).join('/')}`).then(() => true, () => false))) found.push(name)
+    }
+    return found
+  }
+
+  /**
+   * Brings the content and its files back as they were at `asked`, a commit of this branch, on top of the current
+   * history: whatever is there now is committed first, a branch keeps where HEAD was, and the version brought back is
+   * a new commit, so that it can itself be undone the same way. Only `content/` and `public/media/` go back; the code
+   * stays as it is. `check` judges the result before anything is committed (the build, say): when it finds the old
+   * content does not fit, everything is put back as it was, the branch goes, and nothing is committed.
+   */
+  async function restore(asked: string, check: () => Promise<Unfit | null>): Promise<Restored> {
+    if (!HASH.test(asked)) return { ok: false, error: 'bad_commit' }
+    return ownTurn(async (): Promise<Restored> => {
+      const full = await git('rev-parse', '--verify', '--quiet', `${asked}^{commit}`).then(({ stdout }) => stdout.trim(), () => '')
+      // Only a version this site has been through: nothing from another branch, nothing that is not a commit.
+      if (!full || !(await git('merge-base', '--is-ancestor', full, 'HEAD').then(() => true, () => false))) return { ok: false, error: 'unknown_commit' }
+      await commit()
+      const paths = await present(full)
+      if (paths.length === 0) return { ok: false, error: 'unchanged' }
+      const same = await git('diff', '--quiet', full, '--', ...paths, UPLOADING).then(() => true, () => false)
+      if (same) return { ok: false, error: 'unchanged' }
+
+      const { stdout } = await git('log', '-1', '--format=%aI%x00%h', full)
+      const [date = '', short = ''] = stdout.trim().split('\0')
+      let branch = `${SAFETY}${minute(new Date())}`
+      for (let n = 2; await git('rev-parse', '--verify', '--quiet', `refs/heads/${branch}`).then(() => true, () => false); n++) {
+        branch = `${SAFETY}${minute(new Date())}-${n}`
+      }
+      await git('branch', branch, 'HEAD')
+      const putBack = async () => {
+        await git('restore', '--source=HEAD', '--staged', '--worktree', '--', ...(await present('HEAD')), UPLOADING)
+        await git('branch', '-D', branch)
+      }
+      try {
+        await git('restore', `--source=${full}`, '--staged', '--worktree', '--', ...paths, UPLOADING)
+        const unfit = await check()
+        if (unfit) {
+          await putBack()
+          return { ok: false, ...unfit }
+        }
+        // Already staged by the restore. `git add` would refuse a folder that is gone, all its files with it.
+        await git('commit', '--no-verify', '-m', restoredMessage(date, short), '--', ...paths, UPLOADING)
+      } catch (err) {
+        await putBack().catch(() => {})
+        throw err
+      }
+      const { stdout: head } = await git('rev-parse', 'HEAD')
+      if (push) {
+        inTurn(send, 'Contenu remis dans git, mais pas envoyé')
+        inTurn(async () => {
+          // Wherever the branch is sent: the copy elsewhere keeps where the site was too.
+          const upstream = await git('rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}').then(({ stdout }) => stdout.trim().split('/')[0], () => '')
+          await git('push', '--no-verify', upstream || 'origin', `refs/heads/${branch}:refs/heads/${branch}`)
+        }, `Branche ${branch} pas envoyée`)
+      }
+      return { ok: true, commit: head.trim(), from: full, date, branch }
+    })
+  }
 
   let timer: NodeJS.Timeout | undefined
 
@@ -83,6 +178,7 @@ export function contentHistory({ root, name, push = false, quiet = QUIET, warn }
 
   return {
     flush,
+    restore,
     /** To be called after each stored change. */
     changed() {
       clearTimeout(timer)

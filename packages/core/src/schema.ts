@@ -170,3 +170,64 @@ export function newId(prefix: string): string {
   const bytes = crypto.getRandomValues(new Uint8Array(10))
   return `${prefix}_${Array.from(bytes, (b) => (b % 36).toString(36)).join('')}`
 }
+
+const isText = (value: unknown) => typeof value === 'string' || (isObj(value) && isObj(value.$t) && Object.values(value.$t).every((one) => typeof one === 'string'))
+const isRich = (value: unknown): boolean =>
+  typeof value === 'string' || (Array.isArray(value) && value.every((paragraph) => Array.isArray(paragraph))) || (isObj(value) && isObj(value.$t) && Object.values(value.$t).every((one) => one === null || isRich(one)))
+const isFile = (value: unknown) => isObj(value) && typeof value.path === 'string'
+
+/**
+ * Where a content file does not have the shape the schema gives it: a list that is not a list, a group that is not
+ * one, an item of a type the list does not offer, a number where a text should be. Missing values and fields the
+ * schema no longer knows are fine: the editor and the pages expect those. Meant for content written elsewhere than in
+ * the editor, an older version brought back for instance, before the site is built from it. Empty when it fits.
+ */
+export function misfits(fields: Fields, value: unknown, base = ''): string[] {
+  if (!isObj(value)) return [base || '(content)']
+  const found: string[] = []
+  for (const [name, def] of Object.entries(fields)) {
+    const field = value[name]
+    const path = base ? `${base}.${name}` : name
+    if (field === undefined || field === null) continue
+    switch (def.type) {
+      case 'text':
+      case 'longtext':
+      case 'select':
+      case 'color':
+        if (!isText(field)) found.push(path)
+        break
+      case 'richtext':
+        if (!isRich(field)) found.push(path)
+        break
+      case 'range':
+        if (typeof field !== 'number') found.push(path)
+        break
+      case 'file':
+        if (!isFile(field)) found.push(path)
+        break
+      case 'files':
+        if (!Array.isArray(field) || !field.every(isFile)) found.push(path)
+        break
+      case 'group':
+        found.push(...misfits(def.fields, field, path))
+        break
+      case 'list': {
+        if (!Array.isArray(field)) {
+          found.push(path)
+          break
+        }
+        for (const item of field as unknown[]) {
+          if (!isObj(item) || typeof item.id !== 'string') {
+            found.push(path)
+            continue
+          }
+          const type = itemType(def, item as Item)
+          if (!type) found.push(`${path}.${item.id}`)
+          else found.push(...misfits(type.fields, item, `${path}.${item.id}`))
+        }
+        break
+      }
+    }
+  }
+  return found
+}

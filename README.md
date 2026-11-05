@@ -203,7 +203,7 @@ Pour l'activer, le serveur d'édition et l'hébergeur partagent une clé, `FOLIO
 ```json
 {
   "idle": 42000, "dirty": true, "editors": 1, "busy": false, "drafted": true,
-  "uploads": 0, "publishing": false,
+  "uploads": 0, "publishing": false, "restoring": false,
   "sessions": [{ "id": "9f2c41d07ab3e815", "seen": 12000, "idle": 42000, "dirty": true, "drafted": true }]
 }
 ```
@@ -216,6 +216,7 @@ Pour l'activer, le serveur d'édition et l'hébergeur partagent une clé, `FOLIO
 | `busy` | Une requête est en cours, envoi de fichier ou mise en ligne : arrêter maintenant la couperait |
 | `drafted` | Tout ce qui n'est pas enregistré est arrivé en brouillon de secours : fermer ne perd rien |
 | `uploads`, `publishing` | Fichiers en cours d'envoi ; mise en ligne en cours |
+| `restoring` | The content is being brought back to an earlier version (see below) |
 | `sessions` | Un élément par éditeur ouvert : `id` (pour lui parler, `local` pour le navigateur du développeur), `seen` (ms depuis son dernier signe de vie), `idle`, `dirty`, `drafted` |
 
 ### Ouvrir une session : `POST /_foliome/host/grant`
@@ -256,6 +257,21 @@ Un message, l'éditeur l'affiche tel quel : Foliome ne lui donne aucun sens. Fer
 ### Fermer une session : `POST /_foliome/host/close`
 
 `{ "to": "9f2c41d07ab3e815", "notice": { … } }` termine la session tout de suite, ou toutes sans `to` : son cookie n'ouvre plus rien. Ce que son éditeur tenait sans l'avoir enregistré n'est pas perdu : ce qu'il avait déjà envoyé reste en brouillon de secours, et à son prochain signe de vie il remet ce qu'il tient encore, puis affiche `notice`, rendu `final`. L'artiste retrouvera ces brouillons à son retour. La réponse dit combien de sessions sont fermées et si tout ce qui n'était pas enregistré était déjà arrivé : `{ "ok": true, "closed": 1, "drafted": true }`.
+
+### Restoring an earlier version: `POST /_foliome/host/restore`
+
+`{ "commit": "3f9c2ab", "notice": { … } }` brings the site's content back to what it was at that commit, and puts the site online as it was then. Only with the `git` option: without it the answer is a 404 `not_configured`.
+
+- **Only the content goes back**: `content/` and `public/media/`, files added since removed and files removed since put back. The code, and every technical update made since, stay as they are.
+- **Nothing is rewritten**: whatever the artist saved and was not committed yet is committed first; a branch `before-restore/<YYYY-MM-DD-HHMM>` (server time) is made where HEAD was; the old version becomes a new commit on top, signed `Foliome (<site>)`, with the message `content: back to the version of <ISO date> (<short hash>)`, the date being the author date of that commit. A restore is undone by restoring the commit just before it. With `push`, the branch is sent along with the commit.
+- **Only a commit of the site's history**: a hash of 7 to 40 hexadecimal characters, which HEAD descends from. Anything else is a 400, `bad_commit` or `unknown_commit`.
+- **Refused, with a reason, while something is going on**: `409` with `editing` (an open editor holds unsaved changes), `uploading`, `publishing` or `restoring`. `unchanged` (409): the content is already as it was then. While a restore runs, saving, undoing, uploading and publishing are refused (`409 restoring`).
+- **When the old content no longer fits the site**, nothing changes: the files are put back, the branch removed, nothing is committed and the public site is untouched. `422` with `misfit` (the content does not have the shape the schema gives it: `detail` lists where) or `build` (the publish command failed: `detail` is the end of its output). The site's publish command is the check: without one, only the schema is.
+- **Success**: `{ "ok": true, "commit": "<new commit>", "from": "<commit restored>", "date": "<its ISO date>", "branch": "before-restore/2026-11-05-1630" }`. The undo history of the editor is emptied, since it would lead back to files that are gone.
+- **Open editors**: each editor that read the content before the restore is shown `notice` (a notice as for `/notice`; Foliome's own words, with a reload button, without it) until its page is loaded again, whatever else the host says meanwhile.
+- A failure of git itself is a `500` `failed`, after everything has been put back.
+
+The request lasts as long as the build: give it several minutes.
 
 ### Un site prêté : `restricted`
 

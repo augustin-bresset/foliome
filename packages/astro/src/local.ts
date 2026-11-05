@@ -1,11 +1,11 @@
 import { spawn } from 'node:child_process'
 import { createHash, randomBytes, randomInt, timingSafeEqual } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { isIP } from 'node:net'
 import path from 'node:path'
-import { mimeOf, type Schema } from '@foliome/core'
+import { mimeOf, misfits, type Schema } from '@foliome/core'
 import { createApp, type Storage, TooLargeError } from '@foliome/server'
 import { fsStorage } from '@foliome/server/fs'
 import { detectTools } from '@foliome/server/media'
@@ -13,6 +13,7 @@ import { getRequestListener, type HttpBindings } from '@hono/node-server'
 import { Hono, type MiddlewareHandler } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { parse, serialize } from 'hono/utils/cookie'
+import type { Restored, Unfit } from './git.ts'
 
 /**
  * Local editing: the site's dev server doubles as the editing service.
@@ -52,6 +53,11 @@ export interface LocalOptions {
    * kept out of search engines, and `mediaBudget` bytes of files may be sent in a session, in all.
    */
   restricted?: { mediaBudget?: number }
+  /**
+   * Brings the content back as it was at an earlier commit, judged first by `check` (see `contentHistory`). Given when
+   * the content is kept in git: the host can then ask for it, at `POST /_foliome/host/restore`.
+   */
+  restore?: (commit: string, check: () => Promise<Unfit | null>) => Promise<Restored>
 }
 
 /** One editor open on this server, as the host sees it. */
@@ -84,6 +90,8 @@ export interface HostStatus {
   uploads: number
   /** The site is being put online. */
   publishing: boolean
+  /** The content is being brought back to an earlier version. */
+  restoring: boolean
   sessions: HostSession[]
 }
 
@@ -165,6 +173,14 @@ const DRAFT_PATH = /^[\w-]+(\.[\w-]+)*$/
 /** What one sign of life may bring as drafts, in all: far more than any text typed by hand. */
 const DRAFTS_SIZE = 512 * 1024
 const MAX_FILE = 2 * 1024 ** 3
+/** What open editors are told after a restore, unless the host gives its own words. */
+const RESTORED: HostNotice = {
+  text: {
+    fr: 'Le contenu du site vient de revenir à une version précédente. Rechargez la page pour la voir et la modifier.',
+    en: 'The site’s content has just gone back to an earlier version. Reload the page to see and edit it.',
+  },
+  actions: [{ label: { fr: 'Recharger', en: 'Reload' }, do: 'reload' }],
+}
 
 // No I, L, O, 0 or 1: the code is read aloud and typed by hand.
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
@@ -403,6 +419,11 @@ export async function createLocal(options: LocalOptions) {
   const ended = new Map<string, { notice: Kept | null; at: number }>()
   /** One-time tickets the host handed out, by hash: until when each may be used, and when its session will end. */
   const tickets = new Map<string, { expires: number; until: number }>()
+  /** When each session last read the content: one that read it before a restore shows what is no longer there. */
+  const readAt = new Map<string, number>()
+  /** The last restore, and what the editors that have not read the content since are told. */
+  let restored: { at: number; notice: Kept } | null = null
+  let restoring = false
 
   /** The artist did something: whatever the host said until then about their absence no longer holds. */
   const touch = (session: string | null) => {
@@ -425,10 +446,11 @@ export async function createLocal(options: LocalOptions) {
       idle: now - lastActivity,
       dirty: open.some(([, beat]) => beat.dirty),
       editors: editors.size,
-      busy: inFlight > 0 || publishing,
+      busy: inFlight > 0 || publishing || restoring,
       drafted: open.every(([, beat]) => beat.drafted),
       uploads,
       publishing,
+      restoring,
       sessions: open.map(([id, beat]) => ({ id, seen: now - beat.at, idle: now - (activeAt.get(id) ?? lastActivity), dirty: beat.dirty, drafted: beat.drafted })),
     }
   }
@@ -615,7 +637,9 @@ export async function createLocal(options: LocalOptions) {
     editors.set(session, { at: Date.now(), dirty, drafted: !dirty || drafted })
     if (body?.active === true) touch(session)
     const { notice, farewell } = heard(session)
-    return c.json({ notice: shown(notice), farewell: shown(farewell) })
+    // Still showing the content as it was before a restore: nothing else matters until the page is loaded again.
+    const stale = restored && (readAt.get(session) ?? 0) < restored.at ? restored.notice : null
+    return c.json({ notice: shown(stale ?? notice), farewell: shown(farewell) })
   })
 
   // Drafts kept from earlier, offered back when the artist opens the same fields again; and let go of.
@@ -625,6 +649,18 @@ export async function createLocal(options: LocalOptions) {
     const drop = Array.isArray(body?.drop) ? body.drop.filter((field): field is string => typeof field === 'string') : []
     dropDrafts((draft) => drop.includes(draft))
     return c.json({ ok: true })
+  })
+  // While the content is being brought back, nothing else may change it.
+  app.use(async (c, next) => {
+    if (restoring && c.req.method !== 'GET' && c.req.method !== 'HEAD' && /^\/_foliome\/(ops|undo|assets|publish)\/?$/.test(c.req.path)) {
+      return c.json({ error: 'restoring' }, 409)
+    }
+    await next()
+  })
+  app.get('/content', async (c, next) => {
+    const session = sessionOf(c.env.incoming)
+    if (session && isEditor(c.env.incoming)) readAt.set(session, Date.now())
+    await next()
   })
   // A saved change replaces the draft of the same fields. Read before the change is made: the request is read once.
   app.use('/ops', async (c, next) => {
@@ -717,8 +753,6 @@ export async function createLocal(options: LocalOptions) {
     await save()
     return c.json({ ok: true, closed: closing.size, drafted })
   })
-  app.route('/host', host)
-
   app.get('/editor.js', async (c) => {
     const headers = { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-cache' }
     try {
@@ -742,32 +776,83 @@ export async function createLocal(options: LocalOptions) {
   // Putting the site online is the developer's own command (build, then deploy),
   // started by the artist. One run at a time; the artist waits for the outcome.
   let publishing = false
-  app.post('/publish', guard, async (c) => {
-    if (!publishCommand) return c.json({ error: 'not_configured' }, 404)
-    if (publishing) return c.json({ error: 'busy' }, 409)
+  /** Runs the publish command, once at a time: the caller has checked that nothing else is being published. */
+  async function publish(before?: () => Promise<unknown>) {
     publishing = true
     try {
-      await options.beforePublish?.()
+      await before?.()
       // The command must build the public site, not an editable one: it must
       // not inherit what marks this process as an editing session.
       const env = { ...process.env }
       for (const name of ['FOLIOME_EDITABLE', 'NODE_ENV']) delete env[name]
-      const result = await new Promise<{ ok: boolean; log: string }>((done) => {
+      return await new Promise<{ ok: boolean; log: string }>((done) => {
         let log = ''
         const keep = (chunk: Buffer) => {
           log = (log + chunk.toString()).slice(-6000)
         }
-        const child = spawn(publishCommand, { cwd: options.root, env, shell: true })
+        const child = spawn(publishCommand!, { cwd: options.root, env, shell: true })
         child.stdout.on('data', keep)
         child.stderr.on('data', keep)
         child.on('error', (err) => done({ ok: false, log: `${log}\n${err.message}` }))
         child.on('close', (code) => done({ ok: code === 0, log: log.replace(/\x1b\[[0-9;]*m/g, '').trim() }))
       })
-      return c.json(result)
     } finally {
       publishing = false
     }
+  }
+  app.post('/publish', guard, async (c) => {
+    if (!publishCommand) return c.json({ error: 'not_configured' }, 404)
+    if (publishing) return c.json({ error: 'busy' }, 409)
+    return c.json(await publish(options.beforePublish))
   })
+
+  // The host brings the content back to an earlier commit, and puts the site online as it was then. Refused while
+  // the artist holds unsaved changes or something is under way; nothing changes when the old content does not fit.
+  host.post('/restore', async (c) => {
+    const body = (await c.req.json().catch(() => null)) as { commit?: unknown; notice?: unknown } | null
+    if (!options.restore) return c.json({ error: 'not_configured' }, 404)
+    const commit = body?.commit
+    if (typeof commit !== 'string') return c.json({ error: 'bad_commit' }, 400)
+    const notice = body?.notice === undefined ? keep(RESTORED) : keep(body.notice)
+    if (!notice) return c.json({ error: 'invalid', field: 'notice' }, 400)
+    if (restoring) return c.json({ error: 'restoring' }, 409)
+    if (publishing) return c.json({ error: 'publishing' }, 409)
+    const now = status()
+    if (now.uploads > 0) return c.json({ error: 'uploading' }, 409)
+    if (now.dirty) return c.json({ error: 'editing' }, 409)
+    restoring = true
+    try {
+      const outcome = await options.restore(commit, async () => {
+        let doc: unknown = {}
+        try {
+          doc = JSON.parse(await readFile(path.join(options.root, 'content', 'content.json'), 'utf8'))
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code !== 'ENOENT') return { error: 'misfit', detail: 'content/content.json' }
+        }
+        const wrong = misfits(options.schema.content, doc)
+        if (wrong.length) return { error: 'misfit', detail: wrong.slice(0, 20).join(', ') }
+        // The build says whether the site can still be made from it, and the site goes online as it was.
+        if (!publishCommand) return null
+        const built = await publish()
+        return built.ok ? null : { error: 'build', detail: built.log }
+      })
+      if (!outcome.ok) {
+        const status = outcome.error === 'bad_commit' || outcome.error === 'unknown_commit' ? 400 : outcome.error === 'unchanged' ? 409 : 422
+        return c.json(outcome, status)
+      }
+      // Undoing would bring back a content file whose files are gone: the earlier versions are in git now.
+      await rm(path.join(dir, 'history'), { recursive: true, force: true })
+      restored = { at: Date.now(), notice }
+      return c.json(outcome)
+    } catch (err) {
+      return c.json({ ok: false, error: 'failed', detail: err instanceof Error ? err.message.trim() : String(err) }, 500)
+    } finally {
+      restoring = false
+      // The pages are rendered again from what is on disk now, whatever it is.
+      options.onChange()
+    }
+  })
+  app.route('/host', host)
   app.route('/', createApp({ storage, guard: guard as MiddlewareHandler, maxUploadBytes: maxFileSize }))
 
   const api = getRequestListener(app.fetch)

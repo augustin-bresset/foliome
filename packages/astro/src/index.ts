@@ -34,7 +34,8 @@ export interface FoliomeOptions {
    * Commits what the artist changes (`content/` and `public/media/`, nothing else) to the site's git repository: once
    * they have stopped saving for ten minutes, before each publish, and when the server stops. With `push`, the commits
    * also go to the remote, after a merge of what is new there. Meant for a server the artist reaches on their own; a
-   * developer working in the same folder commits for themselves.
+   * developer working in the same folder commits for themselves. The host can then bring the content back to an
+   * earlier commit: see `/_foliome/host/restore`.
    */
   git?: { push?: boolean }
   /** Largest file the artist may send, in bytes, e.g. `50 * 1024 ** 2`. Unset: up to 2 GB. */
@@ -155,6 +156,7 @@ export default function foliome(options: FoliomeOptions): AstroIntegration {
           hostKey: process.env.FOLIOME_HOST_KEY || undefined,
           maxFileSize,
           restricted,
+          restore: history?.restore,
           // Pages are rendered from the content file, which Vite does not know
           // they depend on. Astro also keeps the list of dynamic routes
           // (getStaticPaths) for as long as a page module lives. Dropping the

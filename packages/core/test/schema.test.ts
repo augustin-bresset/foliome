@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { emptyItem, emptyValue, itemUrl, type ListDef, resolvePath, type Schema, uniqueSlug, withSlugs } from '../src/index.ts'
+import { emptyItem, emptyValue, itemUrl, type ListDef, misfits, resolvePath, type Schema, uniqueSlug, withSlugs } from '../src/index.ts'
 
 const projects: ListDef = {
   type: 'list',
@@ -108,4 +108,18 @@ test('new items start empty and page items get a lasting slug', () => {
   assert.deepEqual(slugged.map((p) => p.slug), ['refuge', 'refuge-2', 'projet'])
   assert.equal(itemUrl(projects, slugged[1]!), '/projets/refuge-2')
   assert.equal(uniqueSlug('Maison à Annecy', ['maison-a-annecy']), 'maison-a-annecy-2')
+})
+
+test('content of the wrong shape is found, missing values and unknown fields are not', () => {
+  const known = { ...doc, projects: doc.projects.map((p) => ({ ...p, sections: p.sections.filter((s) => s.type !== 'inconnu') })) }
+  assert.deepEqual(misfits(schema.content, known), [])
+  assert.deepEqual(misfits(schema.content, {}), [])
+  assert.deepEqual(misfits(schema.content, { site: { name: { $t: { fr: 'Atelier', en: 'Studio' } } }, older: 'kept', projects: [{ id: 'p1' }] }), [])
+  assert.deepEqual(misfits(schema.content, doc), ['projects.p1.sections.s3'])
+  assert.deepEqual(misfits(schema.content, []), ['(content)'])
+  assert.deepEqual(
+    misfits(schema.content, { site: { name: 3, contact: 'a@b.c' }, projects: { p1: {} } }),
+    ['site.name', 'site.contact', 'projects'],
+  )
+  assert.deepEqual(misfits(schema.content, { projects: [{ title: 'Sans id' }, { id: 'p2', credits: [{ id: 'c1', role: ['Charpente'] }] }] }), ['projects', 'projects.p2.credits.c1.role'])
 })
