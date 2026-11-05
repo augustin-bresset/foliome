@@ -87,7 +87,7 @@ export function contentHistory({ root, name, push = false, quiet = QUIET, warn }
 
   let turn: Promise<unknown> = Promise.resolve()
   const inTurn = (task: () => Promise<void>, failure: string) => {
-    turn = turn.then(task).catch((err: Error) => warn(`${failure} : ${err.message.trim()}`))
+    turn = turn.then(task).catch((err: Error) => warn(`${failure}: ${err.message.trim()}`))
     return turn
   }
   /** In turn too, but its outcome, or its failure, goes back to whoever asked. */
@@ -155,12 +155,12 @@ export function contentHistory({ root, name, push = false, quiet = QUIET, warn }
       }
       const { stdout: head } = await git('rev-parse', 'HEAD')
       if (push) {
-        inTurn(send, 'Contenu remis dans git, mais pas envoyé')
+        inTurn(send, 'Content restored in git, but not pushed')
         inTurn(async () => {
           // Wherever the branch is sent: the copy elsewhere keeps where the site was too.
           const upstream = await git('rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}').then(({ stdout }) => stdout.trim().split('/')[0], () => '')
           await git('push', '--no-verify', upstream || 'origin', `refs/heads/${branch}:refs/heads/${branch}`)
-        }, `Branche ${branch} pas envoyée`)
+        }, `Branch ${branch} not pushed`)
       }
       return { ok: true, commit: head.trim(), from: full, date, branch }
     })
@@ -171,8 +171,8 @@ export function contentHistory({ root, name, push = false, quiet = QUIET, warn }
   /** Commits now. Resolves once that is done, without waiting for the commit to be sent; it never rejects. */
   const flush = () => {
     clearTimeout(timer)
-    const committed = inTurn(commit, 'Contenu non enregistré dans git')
-    if (push) inTurn(send, 'Contenu enregistré dans git, mais pas envoyé')
+    const committed = inTurn(commit, 'Content not committed to git')
+    if (push) inTurn(send, 'Content committed to git, but not pushed')
     return committed
   }
 

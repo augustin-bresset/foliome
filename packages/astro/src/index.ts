@@ -70,7 +70,7 @@ export default function foliome(options: FoliomeOptions): AstroIntegration {
       // Judged below.
     }
     if (!outside || !/^https?:$/.test(outside.protocol)) {
-      throw new Error(`foliome : « address » doit être une adresse complète, par exemple https://atelier.exemple.fr (reçu : ${options.address})`)
+      throw new Error(`foliome: "address" must be a full address, for instance https://studio.example.com (got: ${options.address})`)
     }
   }
   let root = process.cwd()
@@ -170,9 +170,9 @@ export default function foliome(options: FoliomeOptions): AstroIntegration {
         })
         code = local.code
         missing = [
-          !local.tools.sharp && 'sharp (les images sont gardées telles qu’envoyées)',
-          !local.tools.heic && 'heic-convert (les photos HEIC sont refusées)',
-          !local.tools.ffmpeg && 'ffmpeg (les vidéos sont gardées telles qu’envoyées)',
+          !local.tools.sharp && 'sharp (images are kept as uploaded)',
+          !local.tools.heic && 'heic-convert (HEIC photos are refused)',
+          !local.tools.ffmpeg && 'ffmpeg (videos are kept as uploaded)',
         ].filter((tool): tool is string => !!tool)
         const { allows, middleware } = local
         server.middlewares.use(middleware)
@@ -194,22 +194,22 @@ export default function foliome(options: FoliomeOptions): AstroIntegration {
 
         const key = `?edit=${formatCode(code)}`
         if (restricted) {
-          logger.info(`Site prêté : on n’y entre qu’avec un ticket donné par l’hébergeur (FOLIOME_HOST_KEY${process.env.FOLIOME_HOST_KEY ? '' : ', absente'}).`)
-          if (!outside) logger.info(`Sur cet ordinateur : http://localhost:${port}/?edit`)
+          logger.info(`Lent site: the only way in is a ticket from the host (FOLIOME_HOST_KEY${process.env.FOLIOME_HOST_KEY ? '' : ', not set'}).`)
+          if (!outside) logger.info(`On this computer: http://localhost:${port}/?edit`)
         } else if (outside) {
-          logger.info(`Lien pour l'artiste (à distance) : ${new URL(`/${key}`, outside)}`)
-          logger.info(`Le code est demandé ici aussi : http://localhost:${port}/${key}`)
+          logger.info(`Link for the artist (remote): ${new URL(`/${key}`, outside)}`)
+          logger.info(`The code is asked here too: http://localhost:${port}/${key}`)
         } else {
-          logger.info(`Édition sur cet ordinateur : http://localhost:${port}/?edit`)
+          logger.info(`Editing on this computer: http://localhost:${port}/?edit`)
         }
         if (restricted) {
           // The code opens nothing here: no link to give.
         } else if (onNetwork && lan.length > 0) {
-          for (const ip of lan) logger.info(`Lien pour l'artiste (même réseau) : http://${ip}:${port}/${key}`)
+          for (const ip of lan) logger.info(`Link for the artist (same network): http://${ip}:${port}/${key}`)
         } else if (!outside) {
-          logger.info(`Pour ouvrir l'édition à l'artiste sur le réseau local, relancez avec --host`)
+          logger.info(`To open editing to the artist on the local network, restart with --host`)
         }
-        for (const tool of missing) logger.warn(`Outil absent : ${tool}`)
+        for (const tool of missing) logger.warn(`Missing tool: ${tool}`)
       },
     },
   }

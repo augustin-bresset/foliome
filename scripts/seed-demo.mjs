@@ -490,4 +490,4 @@ const content = {
 await mkdir(path.join(demo, 'content'), { recursive: true })
 await writeFile(path.join(demo, 'content', 'content.json'), `${JSON.stringify(content, null, 2)}\n`)
 const missing = [!tools.sharp && 'sharp', !tools.ffmpeg && 'ffmpeg'].filter(Boolean)
-console.log(`Démo remplie : ${content.projects.length} projets, ${counter} fichiers.${missing.length ? ` Sans ${missing.join(' ni ')} : médias simplifiés.` : ''}`)
+console.log(`Demo seeded: ${content.projects.length} projects, ${counter} files.${missing.length ? ` Without ${missing.join(' or ')}: simpler media.` : ''}`)

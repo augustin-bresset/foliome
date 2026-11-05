@@ -113,7 +113,7 @@ test('a conflict keeps the artist’s work and reports it, and clears up once th
   await history({ push: true }).close()
 
   assert.equal(warnings.length, 1)
-  assert.match(warnings[0] ?? '', /pas envoyé/)
+  assert.match(warnings[0] ?? '', /not pushed/)
   assert.equal(await readFile(path.join(root, 'content/content.json'), 'utf8'), '{"title":"De l’artiste"}\n')
   assert.equal(await git(root, 'status', '--porcelain'), '', 'no merge left half done')
 
