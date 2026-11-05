@@ -1,0 +1,15 @@
+---
+// Visits are counted on the published site only, never in the editor (astro dev).
+---
+
+{
+  import.meta.env.PROD && (
+    <script
+      is:inline
+      defer
+      src="https://stats.foliome.eu/script.js"
+      data-website-id="bc2ef3b6-975f-448a-b4e5-7857683f6da0"
+      data-domains="foliome.eu"
+    ></script>
+  )
+}

@@ -16,7 +16,7 @@ const soon = locale === 'fr' ? 'Bientôt en ligne' : 'Online soon'
     sites.map((site) => (
       <li {...edit(`sites.${site.id}`)}>
         {site.url ? (
-          <a class="made-name" href={site.url} {...edit(`sites.${site.id}.name`)}>
+          <a class="made-name" href={site.url} data-umami-event="site" data-umami-event-nom={site.name} {...edit(`sites.${site.id}.name`)}>
             {site.name}
           </a>
         ) : (

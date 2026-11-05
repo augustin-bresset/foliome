@@ -1,4 +1,5 @@
 ---
+import Stats from '../components/Stats.astro'
 import { edit, isEditing } from '@foliome/astro/content'
 import Made from '../components/Made.astro'
 import { load } from '../content.ts'
@@ -19,6 +20,7 @@ const { sites, email } = await load('fr')
 <link rel="alternate" hreflang="en" href="https://foliome.eu/en/">
 <link rel="preload" href="/fonts/syne-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/home.css">
+<Stats />
 </head>
 <body class="is-waiting" data-editing={isEditing() ? '' : undefined}>
 
@@ -26,8 +28,8 @@ const { sites, email } = await load('fr')
   <a class="brand" href="/">Foliome</a>
   <div class="top-end">
     <a class="lang" href="/en/" hreflang="en" lang="en" aria-label="English version">EN</a>
-    <button type="button" class="top-demo" id="top-demo">Essayer la démo</button>
-    <button type="button" class="signin" id="signin">Accéder à mon site</button>
+    <button type="button" class="top-demo" id="top-demo" data-umami-event="démo">Essayer la démo</button>
+    <button type="button" class="signin" id="signin" data-umami-event="accès">Accéder à mon site</button>
   </div>
 </header>
 
@@ -58,7 +60,7 @@ const { sites, email } = await load('fr')
         <p>Un bouton, et vos visiteurs voient la nouvelle version. Vous n’avez personne à prévenir.</p>
       </li>
     </ol>
-    <p class="demo-call"><button type="button" class="signin" id="demo">Essayer la démo</button> <span>Modifiez l’Atelier Morane, un site d’exemple, comme vous modifieriez le vôtre. Un visiteur à la fois, et tout est remis à neuf après chacun.</span></p>
+    <p class="demo-call"><button type="button" class="signin" id="demo" data-umami-event="démo">Essayer la démo</button> <span>Modifiez l’Atelier Morane, un site d’exemple, comme vous modifieriez le vôtre. Un visiteur à la fois, et tout est remis à neuf après chacun.</span></p>
   </section>
 
   <section class="sheet-of-paper third">
@@ -91,13 +93,13 @@ const { sites, email } = await load('fr')
   <section class="sheet-of-paper fifth">
     <h2>Un projet de site&nbsp;? <span class="whole">Écrivez-moi.</span></h2>
     <p>Je dessine et je code des sites de portfolio pour des artistes, des architectes et des designers. Foliome est l’outil que j’ai construit pour que vous puissiez ensuite les modifier vous-même.</p>
-    <a class="mail" href={`mailto:${email}`} {...edit('contact.email')}>{email}</a>
-    <p>Le code de Foliome est public&nbsp;: <a href="https://github.com/foliome-web/foliome">voir le dépôt sur GitHub</a>.</p>
+    <a class="mail" href={`mailto:${email}`} data-umami-event="e-mail" {...edit('contact.email')}>{email}</a>
+    <p>Le code de Foliome est public&nbsp;: <a href="https://github.com/foliome-web/foliome" data-umami-event="github">voir le dépôt sur GitHub</a>.</p>
     <footer class="foot">
       <a class="brand" href="/">Foliome</a>
       <span class="foot-end">
         <a class="legal" href="/mentions-legales/">Mentions légales</a>
-        <button type="button" class="signin" id="signin-foot">Accéder à mon site</button>
+        <button type="button" class="signin" id="signin-foot" data-umami-event="accès">Accéder à mon site</button>
       </span>
     </footer>
   </section>

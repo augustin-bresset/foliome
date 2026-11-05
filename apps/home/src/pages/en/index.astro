@@ -1,4 +1,5 @@
 ---
+import Stats from '../../components/Stats.astro'
 import { edit, isEditing } from '@foliome/astro/content'
 import Made from '../../components/Made.astro'
 import { load } from '../../content.ts'
@@ -19,6 +20,7 @@ const { sites, email } = await load('en')
 <link rel="alternate" hreflang="en" href="https://foliome.eu/en/">
 <link rel="preload" href="/fonts/syne-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/home.css">
+<Stats />
 </head>
 <body class="is-waiting" data-editing={isEditing() ? '' : undefined}>
 
@@ -26,8 +28,8 @@ const { sites, email } = await load('en')
   <a class="brand" href="/en/">Foliome</a>
   <div class="top-end">
     <a class="lang" href="/" hreflang="fr" lang="fr" aria-label="Version française">FR</a>
-    <button type="button" class="top-demo" id="top-demo">Try the demo</button>
-    <button type="button" class="signin" id="signin">Go to my site</button>
+    <button type="button" class="top-demo" id="top-demo" data-umami-event="démo">Try the demo</button>
+    <button type="button" class="signin" id="signin" data-umami-event="accès">Go to my site</button>
   </div>
 </header>
 
@@ -58,7 +60,7 @@ const { sites, email } = await load('en')
         <p>One button, and your visitors see the new version. You don’t have to ask anyone.</p>
       </li>
     </ol>
-    <p class="demo-call"><button type="button" class="signin" id="demo">Try the demo</button> <span>Edit Atelier Morane, an example site, the way you would edit yours. One visitor at a time, and it is made new again after each one.</span></p>
+    <p class="demo-call"><button type="button" class="signin" id="demo" data-umami-event="démo">Try the demo</button> <span>Edit Atelier Morane, an example site, the way you would edit yours. One visitor at a time, and it is made new again after each one.</span></p>
   </section>
 
   <section class="sheet-of-paper third">
@@ -91,13 +93,13 @@ const { sites, email } = await load('en')
   <section class="sheet-of-paper fifth">
     <h2>A site in mind? <span class="whole">Write to me.</span></h2>
     <p>I design and code portfolio sites for artists, architects and designers. Foliome is the tool I built so that you can then edit them yourself.</p>
-    <a class="mail" href={`mailto:${email}`} {...edit('contact.email')}>{email}</a>
-    <p>Foliome’s code is public: <a href="https://github.com/foliome-web/foliome">see the repository on GitHub</a>.</p>
+    <a class="mail" href={`mailto:${email}`} data-umami-event="e-mail" {...edit('contact.email')}>{email}</a>
+    <p>Foliome’s code is public: <a href="https://github.com/foliome-web/foliome" data-umami-event="github">see the repository on GitHub</a>.</p>
     <footer class="foot">
       <a class="brand" href="/en/">Foliome</a>
       <span class="foot-end">
         <a class="legal" href="/en/legal-notice/">Legal notice</a>
-        <button type="button" class="signin" id="signin-foot">Go to my site</button>
+        <button type="button" class="signin" id="signin-foot" data-umami-event="accès">Go to my site</button>
       </span>
     </footer>
   </section>
