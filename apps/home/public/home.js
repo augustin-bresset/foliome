@@ -614,6 +614,7 @@
     }
   }
   $('demo').addEventListener('click', () => tryDemo($('demo')))
+  $('top-demo').addEventListener('click', () => tryDemo($('top-demo')))
 
   // A light copy of the editor's bar: what the artist finds at the bottom of their own site.
 

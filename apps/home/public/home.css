@@ -104,7 +104,31 @@ button { cursor: pointer; }
   font-size: 1.05rem;
 }
 
-.demo-call .signin { flex: none; }
+.demo-call .signin {
+  flex: none;
+  padding: 11px 22px;
+  border-color: var(--sheet);
+  background: var(--sheet);
+  color: var(--print);
+  font-size: 1.05rem;
+}
+
+.demo-call .signin:hover {
+  background: none;
+  color: var(--sheet);
+}
+
+/* In the header, the demo is the first thing within reach. A phone has no room for it there. */
+.top-demo {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: 600 0.95rem/1.2 'Syne', sans-serif;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
 
 .demo-call span { flex: 1 1 22ch; }
 
@@ -784,6 +808,7 @@ button { cursor: pointer; }
 
 /* On a phone the panel is a sheet at the bottom, as in the editor. */
 @media (max-width: 600px) {
+  .top-demo { display: none; }
   .first { min-height: 0; }
   .works-list > li { width: calc(50% - 13px); }
   .panel {
