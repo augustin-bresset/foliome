@@ -462,7 +462,17 @@
     })
   }
 
-  // Signing in: the access code leads to the artist's own site.
+  // Signing in: the access code opens the artist's space, where their site is. A space still open is gone to at once.
+  const SPACE = root.lang === 'en' ? '/en/espace' : '/espace'
+  const enter = async (trigger, replace = false) => {
+    try {
+      const res = await fetch('/espace/session', { headers: { accept: 'application/json' } })
+      if (res.ok && (await res.json()).open) return replace ? location.replace(SPACE) : location.assign(SPACE)
+    } catch {
+      // Asked for the code, as if no space were open.
+    }
+    signIn(trigger)
+  }
   const signIn = (trigger) => {
     let input
     let error
@@ -488,7 +498,7 @@
         // A site that was asleep takes a few seconds to wake.
         const slow = setTimeout(() => (submit.textContent = t.opening), 1200)
         try {
-          const res = await fetch('/entrer', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code: input.value }) })
+          const res = await fetch('/entrer', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code: input.value, lang: root.lang }) })
           if (res.ok) {
             location.assign((await res.json()).url)
             return false
@@ -507,8 +517,8 @@
       },
     })
   }
-  $('signin').addEventListener('click', () => signIn($('signin')))
-  $('signin-foot').addEventListener('click', () => signIn($('signin-foot')))
+  $('signin').addEventListener('click', () => enter($('signin')))
+  $('signin-foot').addEventListener('click', () => enter($('signin-foot')))
 
   // The demo, one visitor at a time. The door keeps the line; this page holds the ticket that keeps its place, asks for
   // it every few seconds, and goes to the demo when its turn comes. A reload keeps the place, closing the panel gives it
@@ -784,7 +794,7 @@
   }
   // Sent here by a site whose editing had gone to sleep: straight to the code. Back from the demo, or reloaded while
   // waiting for it: to the demo.
-  if (location.hash === '#entrer') signIn($('signin'))
+  if (location.hash === '#entrer') enter($('signin'), true)
   else if (location.hash === '#demo' || sessionStorage.getItem(KEPT)) tryDemo($('demo'))
   else if (!stillness.matches && !editing) play()
 })()
