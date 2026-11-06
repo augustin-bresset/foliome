@@ -200,6 +200,8 @@ An editing server can be started, put to sleep and watched by a program next to 
 
 To turn it on, the editing server and the host share a key, `FOLIOME_HOST_KEY` (the `hostKey` option of `createLocal`). Without it, `/_foliome/host` does not exist. Each request carries the header `X-Foliome-Host: <key>` and arrives under the site's public name, with `Origin: https://<public name>` for a `POST`, as the site's own pages would. Without the right key, the answer is a 404.
 
+With a host key, the server no longer prints the access code in its terminal (its links end in `?edit`): the code is the host's to hand out, and a service's log may be read by others. It is still in `.foliome/local.json`, where the host reads it.
+
 ### What is going on: `GET /_foliome/host`
 
 ```json

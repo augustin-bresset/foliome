@@ -192,7 +192,10 @@ export default function foliome(options: FoliomeOptions): AstroIntegration {
           .filter((i) => i.family === 'IPv4' && !i.internal)
           .map((i) => i.address)
 
-        const key = `?edit=${formatCode(code)}`
+        // Run by a host, the site's code is the host's to hand out: it stays out of the log, which others may read.
+        const hosted = Boolean(process.env.FOLIOME_HOST_KEY)
+        const key = hosted ? '?edit' : `?edit=${formatCode(code)}`
+        if (hosted && !restricted) logger.info('The access code is kept in .foliome/local.json; the host hands it out (POST /_foliome/host/code makes a new one).')
         if (restricted) {
           logger.info(`Lent site: the only way in is a ticket from the host (FOLIOME_HOST_KEY${process.env.FOLIOME_HOST_KEY ? '' : ', not set'}).`)
           if (!outside) logger.info(`On this computer: http://localhost:${port}/?edit`)
