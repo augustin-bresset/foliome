@@ -1,5 +1,6 @@
 import {
   applyOps,
+  getAt,
   type Crumb,
   type Doc,
   emptyItem,
@@ -304,6 +305,30 @@ export function Panel({ schema, content, open, nudge, onDirty, onClose, onOpen, 
     setLocale,
     onUploading: (delta) => setUploading((n) => n + delta),
     onStep: (path) => setSteps((all) => [...all, path]),
+    around: (path, key) => {
+      // The content as it would be once saved: each field of the draft in its place.
+      // An item being created has no place yet: only its own fields are searched.
+      const base = open.kind === 'create' ? null : form.prefix
+      let doc: unknown = draft
+      if (base !== null) {
+        const copy = structuredClone(content)
+        try {
+          applyOps(
+            copy,
+            Object.entries(draft).map(([name, value]) => ({ op: 'set' as const, path: base ? `${base}.${name}` : name, value })),
+          )
+        } catch {
+          // Nothing to lose: the saved content is still a fair place to look.
+        }
+        doc = copy
+      }
+      const parts = (base ? `${base}.${path}` : path).split('.')
+      for (let k = parts.length - 1; k >= 0; k--) {
+        const node = k ? getAt(doc, parts.slice(0, k).join('.')) : doc
+        if (isObj(node) && Object.hasOwn(node, key)) return node[key]
+      }
+      return undefined
+    },
   }
 
   const titleField = creating && createList?.type === 'list' ? itemType(createList, { type: createType })?.titleField : undefined

@@ -1,5 +1,6 @@
 import {
   type Asset,
+  type ChoiceSource,
   describeKinds,
   emptyItem,
   emptyValue,
@@ -34,6 +35,8 @@ export interface FieldContext {
   onUploading: (delta: number) => void
   /** Steps into an item of a list; `path` is relative to the panel's own content. */
   onStep: (path: string) => void
+  /** The value of `key` in the nearest object enclosing `path` (relative to the panel), unsaved changes included. */
+  around: (path: string, key: string) => unknown
 }
 
 /** The language of the page being looked at, when the site has it; otherwise the default one. */
@@ -140,8 +143,8 @@ function Translated(props: FieldProps) {
 function Input(props: FieldProps) {
   const { id, def, value, path, context, onChange, autoFocus } = props
   switch (def.type) {
-    case 'text':
-      return (
+    case 'text': {
+      const input = (
         <input
           id={id}
           class="input"
@@ -152,6 +155,14 @@ function Input(props: FieldProps) {
           onInput={(e) => onChange(e.currentTarget.value)}
         />
       )
+      if (!def.choices?.length) return input
+      return (
+        <>
+          {input}
+          <Choices sources={def.choices} multiple={!!def.multiple} value={plainText(value)} path={path} context={context} onChange={onChange} />
+        </>
+      )
+    }
     case 'longtext':
       return <LongText id={id} value={plainText(value)} placeholder={def.placeholder} autoFocus={autoFocus} onChange={onChange} />
     case 'richtext':
@@ -182,6 +193,93 @@ function Input(props: FieldProps) {
 }
 
 const HEX = /^#[0-9a-f]{6}$/i
+
+/** The names of the objects of a 3D model, read once per file. */
+const modelNames = new Map<string, Promise<string[]>>()
+function namesInModel(asset: Asset): Promise<string[]> {
+  let names = modelNames.get(asset.path)
+  if (!names) {
+    names = fetch(asset.path)
+      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
+      .then((buffer) => {
+        const bytes = new DataView(buffer)
+        let json: { nodes?: { name?: string; mesh?: number; children?: number[] }[] }
+        // A .glb starts with "glTF", then its JSON chunk; a .gltf is the JSON itself.
+        if (bytes.getUint32(0, true) === 0x46546c67) {
+          const length = bytes.getUint32(12, true)
+          json = JSON.parse(new TextDecoder().decode(new Uint8Array(buffer, 20, length)))
+        } else json = JSON.parse(new TextDecoder().decode(buffer))
+        const named = (json.nodes ?? []).filter((n) => n.name && (n.mesh !== undefined || n.children?.length)).map((n) => n.name!.trim())
+        return [...new Set(named)]
+      })
+      .catch(() => [])
+    modelNames.set(asset.path, names)
+  }
+  return names
+}
+
+/** Values found elsewhere in the content, offered under a text field. */
+function Choices({
+  sources,
+  multiple,
+  value,
+  path,
+  context,
+  onChange,
+}: {
+  sources: ChoiceSource[]
+  multiple: boolean
+  value: string
+  path: string
+  context: FieldContext
+  onChange: (value: string) => void
+}) {
+  // Names from a list are shown in the site's default language, the one they are matched against first.
+  const name = (v: unknown) => plainText(isTranslated(v) ? (v.$t[context.locales[0] ?? ''] ?? v) : v).trim()
+  const fromLists = sources.map((s) => {
+    if (!('list' in s)) return null
+    const items = context.around(path, s.list)
+    return Array.isArray(items) ? [...new Set(items.map((item) => name((item as Item)[s.field])).filter(Boolean))] : []
+  })
+  const models = sources.map((s) => ('model' in s ? context.around(path, s.model) : null))
+  const [fromModels, setFromModels] = useState<(string[] | null)[]>(() => sources.map(() => null))
+  const modelKey = models.map((m) => (m && typeof m === 'object' ? (m as Asset).path : '')).join('|')
+  useEffect(() => {
+    let live = true
+    Promise.all(models.map((m) => (m && typeof m === 'object' && (m as Asset).kind === 'model' ? namesInModel(m as Asset) : Promise.resolve(null)))).then(
+      (names) => live && setFromModels(names),
+    )
+    return () => {
+      live = false
+    }
+  }, [modelKey])
+
+  const picked = value.split(',').map((v) => v.trim()).filter(Boolean)
+  const key = (v: string) => v.toLowerCase().replace(/[\s_]+/g, '_')
+  const has = (v: string) => picked.some((p) => key(p) === key(v))
+  const toggle = (v: string) => {
+    if (!multiple) return onChange(has(v) ? '' : v)
+    onChange((has(v) ? picked.filter((p) => key(p) !== key(v)) : [...picked, v]).join(', '))
+  }
+  const rows = sources
+    .map((s, i) => ({ label: s.label, names: fromLists[i] ?? fromModels[i] ?? [] }))
+    .filter((row) => row.names.length > 0)
+  if (!rows.length) return null
+  return (
+    <div class="choices">
+      {rows.map((row) => (
+        <div class="choice-row" role="group" aria-label={row.label}>
+          {row.label && <span class="choice-label">{row.label}</span>}
+          {row.names.map((v) => (
+            <button type="button" class="choice" aria-pressed={has(v)} onClick={() => toggle(v)}>
+              {v}
+            </button>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
 
 /** A colour: the system picker, its code (to paste one from elsewhere), and the site's swatches. */
 function Color({ id, value, swatches, onChange }: { id: string; value: string; swatches?: string[]; onChange: (v: string) => void }) {

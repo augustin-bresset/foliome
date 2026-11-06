@@ -45,7 +45,23 @@ interface Translatable {
   translate?: boolean
 }
 
-export type TextDef = FieldBase & Translatable & { type: 'text'; placeholder?: string }
+/**
+ * Where a text field finds values to offer, shown under it as buttons to click. Each source is looked
+ * for from the field's place in the content outwards: the nearest enclosing object with that key.
+ * - `list`: the items of a list, by one of their fields (the pieces of a project, by name).
+ * - `model`: the names of the objects in a 3D model file (.glb or .gltf), such as its Rhino layers.
+ */
+export type ChoiceSource = ({ list: string; field: string } | { model: string }) & { label?: string }
+
+export type TextDef = FieldBase &
+  Translatable & {
+    type: 'text'
+    placeholder?: string
+    /** Values offered under the field. The artist can still type anything. */
+    choices?: ChoiceSource[]
+    /** With `choices`: the field holds several of them, separated by commas, and each click adds or removes one. */
+    multiple?: boolean
+  }
 export type LongTextDef = FieldBase & Translatable & { type: 'longtext'; placeholder?: string }
 /** Text with bold, italic and links. */
 export type RichTextDef = FieldBase & Translatable & { type: 'richtext' }

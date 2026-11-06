@@ -448,6 +448,47 @@ button:disabled {
   outline-offset: 2px;
 }
 
+/* Values offered under a text field: a click adds or removes one. */
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.choice-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: baseline;
+}
+
+.choice-label {
+  width: 100%;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.choice {
+  padding: 3px 10px;
+  border: 1px dashed var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.choice[aria-pressed='true'] {
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: #fff;
+}
+
+.choice:focus-visible {
+  outline: 2px solid var(--guide);
+  outline-offset: 2px;
+}
+
 /* Slider, with its value beside it. */
 .range {
   display: flex;

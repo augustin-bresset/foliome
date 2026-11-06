@@ -109,6 +109,17 @@ The labels are what the artist sees, so they are in the site's language.
 
 On a list: `addLabel` at the top level adds a button to the toolbar; `path` gives each item a page, with a `slug` taken from the title once and for all.
 
+A `text` field can offer values found elsewhere in the content, as buttons under it: `choices` lists where to look, and `multiple: true` lets the field hold several of them, separated by commas, each click adding or removing one. The artist can still type anything.
+
+```js
+pieces: { type: 'list', label: 'Pièces', fields: { nom: { type: 'text', label: 'Nom' }, calques: { type: 'text', label: 'Calques',
+  choices: [{ model: 'modele' }], multiple: true } } },        // the object names of the nearest 3D model, here its Rhino layers
+etapes: { type: 'list', label: 'Étapes', fields: { composants: { type: 'text', label: 'Pièces concernées',
+  choices: [{ list: 'pieces', field: 'nom', label: 'Pièces' }], multiple: true } } },  // the names of the items of the nearest `pieces` list
+```
+
+Each source is looked for from the field's place outwards: the nearest enclosing object that has that key, with the panel's unsaved changes. A `model` source reads the node names of a `.glb` or `.gltf` file.
+
 ### 2. Read the content
 
 From `@foliome/astro/content`:
