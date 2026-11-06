@@ -225,6 +225,8 @@ To turn it on, the editing server and the host share a key, `FOLIOME_HOST_KEY` (
 
 `{ "ms": 600000, "home": "https://example.org/#demo" }` closes every session and prepares one lasting `ms` milliseconds. The answer, `{ "ticket": "…" }`, can be exchanged once, within two minutes, by sending the visitor to `https://<public name>/?ticket=…`: the server sets its session cookie and removes the ticket from the address. A ticket already used or expired leads to the sign-in page. `home` is the address to send back anyone who arrives without a session on a `restricted` site.
 
+With `"alongside": true`, no session is closed: the ticket opens one more, next to the artist's, for someone of the host's own (to help an artist in their editor, say), and nothing the host said to the open editors is forgotten. On a `restricted` site it is ignored: a site lent out is one visitor's alone.
+
 ### Talking to artists: `POST /_foliome/host/notice`
 
 ```json
@@ -259,6 +261,12 @@ The editor shows a notice as it is: Foliome gives it no meaning. Closing a sessi
 ### Closing a session: `POST /_foliome/host/close`
 
 `{ "to": "9f2c41d07ab3e815", "notice": { … } }` ends the session at once, or all of them without `to`: its cookie no longer opens anything. What its editor held without saving is not lost: what it had already sent stays as a backup draft, and at its next heartbeat it hands over what it still holds, then shows `notice`, made `final`. The artist will find these drafts when they come back. The answer says how many sessions were closed and whether everything unsaved had already arrived: `{ "ok": true, "closed": 1, "drafted": true }`.
+
+### A new access code: `POST /_foliome/host/code`
+
+`{}`, or `{ "notice": { … } }`, makes a new access code, as the server made the first one (8 characters out of `ABCDEFGHJKMNPQRSTUVWXYZ23456789`: no I, L, O, 0 or 1), and writes it to `.foliome/local.json` in place of the old one, which opens nothing any more. Every session ends, as with `/close` without `to`: each open editor hands over what it held unsaved as rescue drafts and is shown `notice`, made `final` (Foliome's own words, « Le code d'accès de ce site vient de changer… », without it). Tickets handed out and not used yet open nothing either. The developer's own browser stays in.
+
+The answer is the only place the new code is given: `{ "ok": true, "code": "K7PQ2MWA", "closed": 1, "drafted": true }`, with `closed` and `drafted` as for `/close`. Refused with `409`: `restricted` (a site lent out has no code), `uploading`, `publishing` or `restoring` (try again once it is done). A host that keeps sessions of its own bound to the code (a fingerprint of it, say) sees them end by themselves, the code they were opened with being gone.
 
 ### Restoring an earlier version: `POST /_foliome/host/restore`
 

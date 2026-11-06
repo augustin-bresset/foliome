@@ -181,6 +181,14 @@ const RESTORED: HostNotice = {
   },
   actions: [{ label: { fr: 'Recharger', en: 'Reload' }, do: 'reload' }],
 }
+/** What open editors are told when the host gives the site a new code, unless it gives its own words. */
+const RECODED: HostNotice = {
+  text: {
+    fr: 'Le code d’accès de ce site vient de changer. Entrez le nouveau code pour continuer.',
+    en: 'This site’s access code has just changed. Enter the new code to go on.',
+  },
+  actions: [{ label: { fr: 'Recharger', en: 'Reload' }, do: 'reload' }],
+}
 
 // No I, L, O, 0 or 1: the code is read aloud and typed by hand.
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
@@ -417,8 +425,11 @@ export async function createLocal(options: LocalOptions) {
   const toOne = new Map<string, Said>()
   /** Sessions the host closed, and what they are told when their editor next calls in. */
   const ended = new Map<string, { notice: Kept | null; at: number }>()
-  /** One-time tickets the host handed out, by hash: until when each may be used, and when its session will end. */
-  const tickets = new Map<string, { expires: number; until: number }>()
+  /**
+   * One-time tickets the host handed out, by hash: until when each may be used, when its session will end, and whether
+   * it opens a session alongside the others instead of in their place.
+   */
+  const tickets = new Map<string, { expires: number; until: number; alongside: boolean }>()
   /** When each session last read the content: one that read it before a restore shows what is no longer there. */
   const readAt = new Map<string, number>()
   /** The last restore, and what the editors that have not read the content since are told. */
@@ -541,8 +552,9 @@ export async function createLocal(options: LocalOptions) {
     if (granted && granted.expires > now && granted.until > now) {
       tickets.delete(hash)
       const token = randomBytes(32).toString('base64url')
-      // The one session: whoever had one before is out.
-      state.sessions = { [sha256(token)]: granted.until }
+      // The one session, whoever had one before is out; or, when the host asked, one more next to theirs.
+      if (granted.alongside) state.sessions[sha256(token)] = granted.until
+      else state.sessions = { [sha256(token)]: granted.until }
       await save()
       const cookie = serialize(COOKIE, token, { path: '/', httpOnly: true, sameSite: 'Lax', secure: secureFor(req.headers.host), maxAge: Math.floor((granted.until - now) / 1000) })
       res.writeHead(303, { location: clean, 'set-cookie': cookie, 'cache-control': 'no-store' })
@@ -682,26 +694,31 @@ export async function createLocal(options: LocalOptions) {
 
   host.post('/grant', async (c) => {
     // A session for whoever the host sends here next, for `ms`, entered through the ticket returned. Every other
-    // session ends: the site is theirs alone.
-    const body = (await c.req.json().catch(() => null)) as { ms?: unknown; home?: unknown } | null
+    // session ends: the site is theirs alone. With `alongside`, the others stay open: the host lets someone of its
+    // own in next to the artist. A site lent to strangers is always one visitor's alone.
+    const body = (await c.req.json().catch(() => null)) as { ms?: unknown; home?: unknown; alongside?: unknown } | null
     const ms = Number(body?.ms)
     if (!Number.isFinite(ms) || ms <= 0 || ms > LONGEST_SESSION) return c.json({ error: 'invalid' }, 400)
+    if (body?.alongside !== undefined && typeof body.alongside !== 'boolean') return c.json({ error: 'invalid' }, 400)
+    const alongside = body?.alongside === true && !restricted
     const now = Date.now()
-    state.sessions = {}
-    tickets.clear()
-    editors.clear()
-    activeAt.clear()
-    toAll = { notice: null, farewell: null }
-    toOne.clear()
-    ended.clear()
-    mediaSpent = 0
+    if (!alongside) {
+      state.sessions = {}
+      tickets.clear()
+      editors.clear()
+      activeAt.clear()
+      toAll = { notice: null, farewell: null }
+      toOne.clear()
+      ended.clear()
+      mediaSpent = 0
+    }
     const home = body?.home
     if (typeof home === 'string' && /^https?:\/\//.test(home)) state.home = home
     // A site lent to one stranger after another: nobody finds what the last one left unsaved.
     if (restricted) dropDrafts(() => true)
     await save()
     const ticket = randomBytes(32).toString('base64url')
-    tickets.set(sha256(ticket), { expires: Math.min(now + TICKET_LIFE, now + ms), until: now + ms })
+    tickets.set(sha256(ticket), { expires: Math.min(now + TICKET_LIFE, now + ms), until: now + ms, alongside })
     return c.json({ ticket })
   })
 
@@ -729,14 +746,11 @@ export async function createLocal(options: LocalOptions) {
     return c.json({ ok: true })
   })
 
-  host.post('/close', async (c) => {
-    // The session ends here and now. Its editor, when it next calls in, hands over what it holds unsaved as rescue
-    // drafts, and is told `notice`; until then, what it last sent is kept already.
-    const body = (await c.req.json().catch(() => null)) as { to?: unknown; notice?: unknown } | null
-    const to = body?.to
-    if (to !== undefined && (typeof to !== 'string' || !known(to))) return c.json({ error: 'no_session' }, 404)
-    const notice = body?.notice === undefined ? null : keep(body.notice)
-    if (notice === undefined) return c.json({ error: 'invalid', field: 'notice' }, 400)
+  /**
+   * Ends the session `to`, or every one but the developer's own browser. Each editor, when it next calls in, hands over
+   * what it holds unsaved as rescue drafts, and is told `notice`; until then, what it last sent is kept already.
+   */
+  async function closeSessions(to: string | undefined, notice: Kept | null) {
     const now = Date.now()
     const closing = new Set([...Object.keys(state.sessions).map(idOf), ...editors.keys()].filter((session) => session !== LOCAL && (to === undefined || session === to)))
     let drafted = true
@@ -751,7 +765,35 @@ export async function createLocal(options: LocalOptions) {
     }
     for (const [session, end] of ended) if (now - end.at > ENDED_LIFE) ended.delete(session)
     await save()
-    return c.json({ ok: true, closed: closing.size, drafted })
+    return { closed: closing.size, drafted }
+  }
+
+  host.post('/close', async (c) => {
+    // The session ends here and now (see `closeSessions`).
+    const body = (await c.req.json().catch(() => null)) as { to?: unknown; notice?: unknown } | null
+    const to = body?.to
+    if (to !== undefined && (typeof to !== 'string' || !known(to))) return c.json({ error: 'no_session' }, 404)
+    const notice = body?.notice === undefined ? null : keep(body.notice)
+    if (notice === undefined) return c.json({ error: 'invalid', field: 'notice' }, 400)
+    return c.json({ ok: true, ...(await closeSessions(to as string | undefined, notice)) })
+  })
+
+  // A new access code, made here like the first one: the old one opens nothing any more, and every session it opened
+  // ends, tickets not used yet with them. The host is given the new code, to hand to the artist.
+  host.post('/code', async (c) => {
+    const body = (await c.req.json().catch(() => null)) as { notice?: unknown } | null
+    if (restricted) return c.json({ error: 'restricted' }, 409)
+    const notice = body?.notice === undefined ? keep(RECODED) : keep(body.notice)
+    if (!notice) return c.json({ error: 'invalid', field: 'notice' }, 400)
+    if (restoring) return c.json({ error: 'restoring' }, 409)
+    if (publishing) return c.json({ error: 'publishing' }, 409)
+    if (status().uploads > 0) return c.json({ error: 'uploading' }, 409)
+    let code = newCode()
+    while (code === state.code) code = newCode()
+    state.code = code
+    tickets.clear()
+    const { closed, drafted } = await closeSessions(undefined, notice)
+    return c.json({ ok: true, code, closed, drafted })
   })
   app.get('/editor.js', async (c) => {
     const headers = { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-cache' }
@@ -907,7 +949,10 @@ export async function createLocal(options: LocalOptions) {
   }
 
   return {
-    code: state.code,
+    /** The access code as it is now: the host may give the site a new one (`POST /_foliome/host/code`). */
+    get code() {
+      return state.code
+    },
     tools,
     /** Whether a request comes from someone who may see the site. */
     allows: isEditor,

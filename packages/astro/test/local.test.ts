@@ -473,3 +473,72 @@ test('the host closes a session: its editor hands over what it held unsaved, and
   assert.deepEqual(json((await site.host('/close', {})).text), { ok: true, closed: 1, drafted: true })
   assert.equal((await site.call('/_foliome/content', zoe.cookie)).status, 401)
 })
+
+test('a ticket granted alongside opens one more session and closes none', async () => {
+  const site = await hosted()
+  const artist = await site.signIn(site.code, `https://${PUBLIC}`, PUBLIC)
+  await site.call('/_foliome/presence', artist.cookie, { dirty: true, active: true })
+  assert.equal((await site.host('/grant', { ms: 60_000, alongside: 'yes' })).status, 400)
+  const ticket = json((await site.host('/grant', { ms: 60_000, alongside: true })).text).ticket as string
+  const entered = await site.ask(`/?ticket=${ticket}`, { host: PUBLIC })
+  assert.equal(entered.status, 303)
+  assert.equal((await site.call('/_foliome/content', entered.cookie)).status, 200)
+  assert.equal((await site.call('/_foliome/content', artist.cookie)).status, 200, 'the artist is still in')
+  assert.equal((await site.presence()).editors, 1, 'and their editor still counted')
+  // A plain grant still leaves the site to one alone.
+  await site.grant(60_000)
+  assert.equal((await site.call('/_foliome/content', artist.cookie)).status, 401)
+  assert.equal((await site.call('/_foliome/content', entered.cookie)).status, 401)
+})
+
+test('the host gives the site a new code: the old one opens nothing, every session ends, the editors are told', async () => {
+  const site = await hosted()
+  const before = site.code
+  const waiting = await site.grant(60_000)
+  const tom = await site.signIn(before, `https://${PUBLIC}`, PUBLIC)
+  await site.call('/_foliome/presence', tom.cookie, { dirty: false, active: true })
+  const zoe = await site.signIn(before, `https://${PUBLIC}`, PUBLIC)
+
+  // The key is needed, as for everything the host asks.
+  assert.equal((await site.host('/code', {}, { ...fromHost, 'x-foliome-host': 'guess' })).status, 404)
+  assert.equal((await site.host('/code', {}, { ...fromHost, origin: 'https://elsewhere.example' })).status, 403)
+  assert.equal((await site.host('/code', { notice: { text: 12 } })).status, 400)
+  assert.equal(JSON.parse(await readFile(path.join(site.root, '.foliome', 'local.json'), 'utf8')).code, before, 'nothing changed yet')
+
+  const answer = json((await site.host('/code', {})).text)
+  const code = answer.code as string
+  assert.equal(answer.ok, true)
+  assert.match(code, /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{8}$/, 'the format of the first code')
+  assert.notEqual(code, before)
+  assert.equal(answer.closed, 2)
+  // Written down where the code is kept, so that a restart keeps it.
+  assert.equal(JSON.parse(await readFile(path.join(site.root, '.foliome', 'local.json'), 'utf8')).code, code)
+  assert.deepEqual(JSON.parse(await readFile(path.join(site.root, '.foliome', 'local.json'), 'utf8')).sessions, {})
+
+  // Every session is over, and a ticket handed out before opens nothing.
+  assert.equal((await site.call('/_foliome/content', tom.cookie)).status, 401)
+  assert.equal((await site.call('/_foliome/content', zoe.cookie)).status, 401)
+  assert.equal((await site.ask(`/?ticket=${waiting}`, { host: PUBLIC })).status, 401)
+  // The open editor hears why, once.
+  const told = json((await site.call('/_foliome/presence', tom.cookie, { dirty: false })).text)
+  assert.match(String((told.notice as { text: { fr: string } }).text.fr), /code d’accès de ce site vient de changer/)
+  assert.equal((told.notice as { final?: boolean }).final, true)
+
+  // The old code opens nothing; the new one does.
+  assert.equal((await site.signIn(before, `https://${PUBLIC}`, PUBLIC)).status, 401)
+  assert.equal((await site.signIn(code, `https://${PUBLIC}`, PUBLIC)).status, 200)
+})
+
+test('a new code is refused on a site lent to strangers, and while something is under way', async () => {
+  const lent = await hosted({ restricted: {} })
+  assert.equal((await lent.host('/code', {})).status, 409)
+  const site = await hosted({ publish: 'sleep 1' })
+  const { cookie } = await site.signIn(site.code, `https://${PUBLIC}`, PUBLIC)
+  const publishing = site.call('/_foliome/publish', cookie, {})
+  await new Promise((done) => setTimeout(done, 200))
+  const refused = await site.host('/code', {})
+  assert.equal(refused.status, 409)
+  assert.equal(json(refused.text).error, 'publishing')
+  await publishing
+  assert.equal((await site.host('/code', {})).status, 200)
+})
